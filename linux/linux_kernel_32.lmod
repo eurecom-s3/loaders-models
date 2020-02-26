@@ -1,0 +1,61 @@
+### Model for 32-bit ELF parsing in Linux kernel v5.5
+## Written by Ervin Oro, Dario Nisi
+
+
+# Not part of the kernel, but implementation details
+DEFINE MAX_FILESIZE 1000
+
+LOAD linux_kernel linux
+INPUT HEADER MAX_FILESIZE
+DEFINE ELF_LENGTH 1000 # TODO!
+
+P: elf <- HEADER
+P: ehdr <- elf[0, (sizeof Elf32_Ehdr)] AS Elf32_Ehdr
+
+# binfmt_elf.c:706
+# First of all, some simple consistency checks
+V1: (And (And (Eq ehdr.e_ident[0] 0x7f) (Eq ehdr.e_ident[1] "E")) (And (Eq ehdr.e_ident[2] "L") (Eq ehdr.e_ident[3] "F"))) term
+V2: (Or (Eq ehdr.e_type ET_EXEC) (Eq ehdr.e_type ET_DYN)) term
+# This is used to ensure we don't load something for the wrong architecture.
+V22: (Or (Eq ehdr.e_machine EM_386) (Eq ehdr.e_machine EM_486)) term
+
+# binfmt_elf.c:428
+# If the size of this structure has changed, then punt, since we will be doing the wrong thing.
+V3: (Eq ehdr.e_phentsize (sizeof Elf32_Phdr)) term
+
+DEFINE ELF_MIN_ALIGN 4096
+# binfmt_elf.c:433
+# Sanity check the number of program headers and their total size.
+P: size <- Mul (sizeof Elf32_Phdr) ehdr.e_phnum
+V4: Not (Or (Or (Eq size 0) (GT size 65536)) (GT size 4096)) term
+
+# binfmt_elf.c:442
+# Read in the program headers
+V5: (UGe MAX_FILESIZE (Add size ehdr.e_phoff)) term
+
+DEFINE PATH_MAX 4096
+# TODO: TASK_SIZE is config dependent
+DEFINE TASK_SIZE 0xC0000000
+P: phdroff <- ehdr.e_phoff
+P: phnum <- ehdr.e_phnum
+
+L1: phdr <- LOOP(elf, phdroff, (sizeof Elf32_Phdr), phnum, 5) AS Elf32_Phdr
+    P: type <- phdr.p_type
+    V6: (Eq phdr.p_type PT_INTERP)
+        # binfmt_elf.c:735
+        V7(V6): (And (Le 2 phdr.p_filesz) (Le phdr.p_filesz PATH_MAX)) term
+        # binfmt_elf.c:744
+        V8(V6): (Ge ELF_LENGTH (Add phdr.p_offset phdr.p_filesz)) term
+        # make sure path is NULL terminated
+        # binfmt_elf.c:753
+	P: poffset <- phdr.p_offset
+	P: pfilesz <- phdr.p_filesz
+        V9(V6): (Eq elf[(Sub (Add phdr.p_offset phdr.p_filesz) 1)] 0) term
+    V10: (Eq phdr.p_type PT_LOAD)
+            # binfmt_elf.c:1012
+            # Check to see if the section's size will overflow the allowed task size.
+            V11(V10): (Lt phdr.p_vaddr TASK_SIZE) term
+            V12(V10): (Le phdr.p_filesz phdr.p_memsz) term
+            V13(V10): (Le phdr.p_memsz TASK_SIZE) term
+            V14(V10): (Ge (Sub TASK_SIZE phdr.p_memsz) phdr.p_vaddr) term
+END L1

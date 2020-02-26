@@ -1,0 +1,72 @@
+### Model for ELF loading in 32-bit glibc
+## Written by Ervin Oro
+
+# Note: this is not done for ELF files that are loaded by the kernel (usual for executables)
+
+# Not part of glibc, but implementation details
+DEFINE MAX_FILESIZE 1000
+
+LOAD linux_kernel linux
+
+INPUT elf MAX_FILESIZE
+DEFINE ELF_LENGTH 1000 # TODO!
+
+P: ehdr <- elf[0, (sizeof Elf32_Ehdr)] AS Elf32_Ehdr
+
+# dl-load.c:1567
+# "file too short"
+V1: (Ge ELF_LENGTH (sizeof Elf32_Ehdr)) term
+
+# dl-load.c:1593
+# "invalid ELF header"
+V2: (And (And (Eq ehdr.e_ident[EI_MAG0] ELFMAG0) (Eq ehdr.e_ident[EI_MAG1] ELFMAG1)) (And (Eq ehdr.e_ident[EI_MAG2] ELFMAG2) (Eq ehdr.e_ident[EI_MAG3] ELFMAG3))) term
+# dl-load.c:1607
+# "wrong ELF class"
+V3: (Eq ehdr.e_ident[EI_CLASS] ELFCLASS32) term
+# dl-load.c:1615
+# "ELF file data encoding not little-endian"
+V4: (Eq ehdr.e_ident[EI_DATA] ELFDATA2LSB) term
+# dl-load.c:1622
+# "ELF file version ident does not match current one"
+V5: (Eq ehdr.e_ident[EI_VERSION] EV_CURRENT) term
+# dl-load.c:1627
+# "ELF file OS ABI invalid"
+V6: (Eq ehdr.e_ident[EI_OSABI] ELFOSABI_SYSV) term
+# dl-load.c:1629
+# "ELF file ABI version invalid"
+V7: (Eq ehdr.e_ident[EI_ABIVERSION] 0) term
+# dl-load.c:1632
+L1: padding <- LOOP(ehdr.e_ident, EI_PAD, 1, (Sub EI_NIDENT EI_PAD), 7)
+    # "nonzero padding in e_ident"
+    V8: (Eq padding 0) term
+END L1
+# dl-load.c:1642
+# "ELF file version does not match current one"
+V9: (Eq ehdr.e_version EV_CURRENT) term
+# sysdeps/i386/dl-machine.h:33
+V10: (Eq ehdr.e_machine EM_386) term
+# dl-load.c:1649
+# "only ET_DYN and ET_EXEC can be loaded"
+V11: (Or (Eq ehdr.e_type ET_EXEC) (Eq ehdr.e_type ET_DYN)) term
+
+# dl-load.c:1655
+# "ELF file's phentsize not the expected size"
+V12: (Eq ehdr.e_phentsize (sizeof Elf32_Phdr)) term
+
+#dl-load.c:1667
+V13: (Ge ELF_LENGTH (Add (Mul (sizeof Elf32_Phdr) ehdr.e_phnum) ehdr.e_phoff)) term
+
+LOAD glibc_extra linux
+
+DEFINE structsize 0
+DEFINE count 0
+
+L2: phdr <- LOOP(elf, ehdr.e_phoff, (sizeof Elf32_Phdr), ehdr.e_phnum, 2) AS Elf32_Phdr
+    V14: (And (And (Eq phdr.p_type PT_NOTE) (Ge phdr.p_filesz 32)) (Or (Eq phdr.p_align 4) (Eq phdr.p_align 8)))
+        #dl-load.c:1706
+        V15(V14): (Ge ELF_LENGTH (Add phdr.p_offset phdr.p_filesz)) term
+            L3: abi_note <- LOOP(elf[phdr.p_offset, phdr.p_filesz], 0, structsize, count, 2) AS Elf32_Note # TODO dl-load.c:1714
+                V16(V15): (And (And (Eq abi_note.namesz 4) (Eq abi_note.descsz 16)) (And (Eq abi_note.type 1) (And (And (Eq abi_note.name[0] "G") (Eq abi_note.name[1] "N")) (And (Eq abi_note.name[2] "U") (Eq abi_note.name[3] 0)))))
+                V17(V16): (And (Eq abi_note.desc[0] 0) (Or (Eq _dl_osversion 0) (Ge _dl_osversion (Add (Add (Mul (BitAnd abi_note.desc[1] 0xff) 65536) (Mul (BitAnd abi_note.desc[2] 0xff) 256)) (BitAnd abi_note.desc[3] 0xff))))) term
+            END L3
+END L2

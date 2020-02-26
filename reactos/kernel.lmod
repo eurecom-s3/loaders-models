@@ -1,0 +1,152 @@
+input HEADER 1000
+#in PHeader
+
+P: DOSMagic <- HEADER[0,2]
+V1: (And (Eq DOSMagic[0] "M") (Eq DOSMagic[1] "Z")) term
+
+P: e_lfanew <- HEADER[0x3c, 4]
+V2: (GE e_lfanew 0) term
+V3: (ULE e_lfanew 0xffffffe7) term
+
+P: NT_HEADER <- HEADER[e_lfanew, 24]
+V4: (And (And (Eq NT_HEADER[0] "P") (Eq NT_HEADER[1] "E")) (And (Eq NT_HEADER[3] 0) (Eq NT_HEADER[4] 0))) term
+
+P: NT_OPT_SIZE <- NT_HEADER[20, 2]
+P: NT_OPT_OFF <- (Add e_lfanew 0x18)
+V5: (ULE NT_OPT_OFF (Sub 0xffffffff NT_OPT_SIZE)) term
+V6: (UGE NT_OPT_SIZE 2) term
+
+#P: NT_OPT <- HEADER[NT_OPT_OFF, NT_OPT_SIZE] # this does not work: the length of a variable must be fixed.
+P: NT_OPT <- HEADER[NT_OPT_OFF, 96]					
+P: OPT_MAGIC <- NT_OPT[0, 2]
+V7: (Eq OPT_MAGIC 0x10b) term
+
+V8: ( AND (UGE NT_OPT_SIZE (Add 0x20 4) ) (UGE NT_OPT_SIZE (Add 0x24 4)))
+
+P(V8): sectionAlign <- NT_OPT[0x20, 4]
+P(V8): fileAlign <- NT_OPT[0x24, 4]
+V11(V8): (ULE sectionAlign 0x1000)
+V12(V11): (NOT (NEQ sectionAlign fileAlign)) term
+
+V13(!V11): (NOT (ULT sectionAlign fileAlign)) term
+
+V14(V8): (NOT (OR (isPow2 sectionAlign) (isPow2 fileAlign))) term
+
+P(!V8): sectionAlign <- (INT 0x1000 4)
+P(!V8): fileAlign <- (INT 0x1000 4)
+
+V15: (UGE NT_OPT_SIZE (Add 28 4))
+P(V15): ImageBase <- NT_OPT[28, 4]
+P(!V15): ImageBase <- (INT 0x0 4)
+
+V16: (UGE NT_OPT_SIZE (Add 56 4))
+P(V16): ImageFileSize <- NT_OPT[56, 4]
+P(!V16): ImageFileSize <- (INT 0x0 4)
+
+V16: (UGE NT_OPT_SIZE (Add 72 4))
+P(V16): MaxStack <- NT_OPT[72, 4]
+P(!V16): MaxStack <- (INT 0x0 4)
+
+V17: (ULE (Add 76 4) NT_OPT_SIZE)
+P(V17): CommitStack <- NT_OPT[76, 4]
+P(!V17): CommitStack <- (INT 0x0 4)
+
+V18: (ULE (Add 68 2) NT_OPT_SIZE)
+P(V18): Subsystem <- NT_OPT[68, 2]
+V19(V18): (ULE (Add 46 2) NT_OPT_SIZE)
+V20(V18): (ULE (Add 48 2) NT_OPT_SIZE)
+V21(V19, V20);
+P(V21): SubSystMinor <- NT_OPT[46, 2]
+P(V21): SubSystMajor <- NT_OPT[48, 2]
+
+V22: (ULE (Add 16 4) NT_OPT_SIZE)
+P(V22): TransferAddress <- (Add ImageBase NT_OPT[16, 4])
+
+V23: (ULE (Add 4 4) NT_OPT_SIZE)
+# P(V23): ImageContainsCode <- (NEq NT_OPT[4, 4] 0x00000000)
+# P(!V23): ImageContainsCode <- True
+
+V24(V22): (Eq NT_OPT[16, 4] 0)
+# P(V24): ImageContainsCode <- False
+
+V25: (ULE (Add 70 2) NT_OPT_SIZE)
+P(V25): DllCharacteristics <- (BITOR NT_OPT[70, 2] 0x0200)
+
+V26: (Eq (Mod ImageBase 0x10000) 0) term
+
+P: Machine <- NT_HEADER[4, 2]
+P: GpValue <- 0
+P: ZeroBits <- 0
+P: BaseAddr <- ImageBase
+P: NSection <- NT_HEADER[6, 2]
+
+V27: (GT NT_HEADER[6, 2] 96) term
+
+P: NrSegm <- (Add NT_HEADER[6, 2] 1)
+
+# line 578
+V28: (ULE e_lfanew (Sub 0xffffffff 24)) term
+P: SectionHeaderOff <- (Add e_lfanew 24)
+V29: (ULE SectionHeaderOff (Sub 0xffffffff NT_OPT_SIZE)) term
+P: SectionHeaderOff <- (Add SectionHeaderOff NT_OPT_SIZE)
+
+V30: (ULE  NSection (UDiv 0xffffffff 0x28)) term
+P: SectionHeaderSize <- (Mul 0x28 NSection)
+
+V31: (ULE SectionHeaderOff (Sub 0xffffffff SectionHeaderSize)) term
+
+V32: (ULE (Add 60 4) NT_OPT_SIZE)
+P: SizeOfHeaders <- NT_OPT[60, 4]
+V33(V32): (GT SectionHeaderSize NT_OPT[60, 4]) term
+P(V32): HeadersSize <- SizeOfHeaders
+
+# line 602
+P: nExcess <- (BITAnd SectionHeaderSize (Sub fileAlign 1))
+V34(!V32): (Eq nExcess 0)
+P(V34): HeaderSize <- SectionHeaderSize
+V35(!V34): (ULE SectionHeaderSize (Sub 0xffffffff (Sub fileAlign nExcess))) term
+P(!V34): HeaderSize <- (Add SectionHeaderSize (Sub fileAlign nExcess))
+
+### This is a pointer in the code... It is then used to address the header
+# P: pishSectionHeaders <- (Add PHeader SectionHeaderOff)
+
+P: pishSectionHeaders <- SectionHeaderOff
+
+# Here the loader read more file if the full header has not been loaded completely yet.
+# Assuming it was entirely loaded already
+
+# line 678: imo redundant
+P: nPrevVirtualEndOfSegment <- (BITAND (Add HeaderSize (Sub sectionAlign 1)) (BITNot (Sub sectionAlign 1)))
+V36: (LE nPrevVirtualEndOfSegment HeaderSize) term
+
+# the following are part of a cycle, repeated (NrSegm-1) times
+#pishSectionHeader taken from pishSectionHeaders array
+# Begin Cycle
+P: pishSectionHeader <- HEADER[pishSectionHeaders, 40]
+
+P: VirtualAddr <- pishSectionHeader[12, 4]
+V37: (NOT (Eq (BITAnd VirtualAddr (Sub sectionAlign 1)) 0)) term
+V38: (NEq VirtualAddr nPrevVirtualEndOfSegment) term
+
+P: SizeOfRawData <- pishSectionHeader[16, 4]
+V39: (NEq SizeOfRawData 0)
+P(V39): FileOffset <- pishSectionHeader[20, 4]
+P(V39): RawLength <- pishSectionHeader[16, 4]
+
+P: VirtualSize <- pishSectionHeader[8, 4]
+V40: (Or (Eq VirtualSize 0) (LT VirtualSize SizeOfRawData))
+P(V40): Length <- SizeOfRawData
+P(!V40): Length <- VirtualSize
+
+P: LengthLowPart <- Length[0, 4]
+P: AlignedLength <- (BITAnd (Add LengthLowPart (Sub sectionAlign 1)) (BitNot (Sub sectionAlign 1)))
+V41: (LT AlignedLength LengthLowPart) term
+V42: (NEq Length 0) term
+
+P: VirtualAddress <- pishSectionHeader[12, 4]
+P: nPrevVirtualEndOfSegment <- (Add VirtualAddress Length)
+V43: (LT nPrevVirtualEndOfSegment VirtualAddress) term
+# END L1
+#end of cycle
+
+# SUCCESS !!
