@@ -1,0 +1,80 @@
+LOADREL ntkrnlmp
+
+INPUT HEADER 2000 as DOSHeader
+
+V1: AND EQ HEADER.magic[0] "M" EQ HEADER.magic[1] "Z" term
+V2: ULE (ADD HEADER.e_lfanew 0xf8) 0x1000 term
+
+# MiVerifyImageHeader
+P: NT_HEADER <- HEADER[HEADER.e_lfanew, sizeof _IMAGE_NT_HEADERS] as _IMAGE_NT_HEADERS
+V3: EQ NT_HEADER.Signature 0x4550  term
+
+
+#### Start of MiVerifyImageHeader
+P: progHeader <- NT_HEADER.FileHeader as _IMAGE_FILE_HEADER
+V4: NEq progHeader.Machine 0 term
+V5: NEq progHeader.SizeOfOptionalHeader 0 term
+
+V6: NEq (BITAND progHeader.Characteristics 2) 0 term
+V7: Eq (BITAND HEADER.e_lfanew 3) 0 term
+
+P: optHdr <- NT_HEADER.OptionalHeader as _IMAGE_OPTIONAL_HEADER
+V8: Eq optHdr.Magic 0x10b term
+
+V9: OR (EQ (BITAND optHdr.FileAlignment 0x1ff) 0) (EQ optHdr.SectionAlignment optHdr.FileAlignment) term
+V10: NEq optHdr.FileAlignment 0 term
+V11: ISPOW2 optHdr.SectionAlignment term
+V12: ISPOW2 optHdr.FileAlignment term
+V13: UGE optHdr.SectionAlignment optHdr.FileAlignment term
+V14: ULE optHdr.SizeOfImage 0x77000000 term
+V15: ULE progHeader.NumberOfSections 0x60 term
+V16: Eq progHeader.Machine 0x14c term
+
+#### End of MiVerifyImageHeader
+
+# MiCreateImageFileMap:274
+P: npages <- SHR optHdr.SizeOfImage 12
+V171: NEq BITAND optHdr.SizeOfImage 0xfff 0
+P(V171): npages <- Add npages 1
+# The following is npages != 0 in the code, but this is equivalent but easier to solve
+V17: NEq optHdr.SizeOfImage 0 term
+
+# MiCreateImageFileMap:337
+V18: Eq optHdr.ImageBase 0 term
+
+# MiCreateImageFileMap:337
+V19: ULT optHdr.SizeOfHeaders optHdr.SizeOfImage term
+
+# MiCreateImageFileMap:406 else branch
+V20: UGE optHdr.SectionAlignment 0x1000
+V21(V20): NEq optHdr.SizeOfHeaders 0 term
+
+# MiCreateImageFileMap (defined at 341, used at 403)
+P: PtesInSubsection <- SUB ADD optHdr.SizeOfHeaders optHdr.SectionAlignment 1
+V22(V20): UGT PtesInSubsection optHdr.SizeOfHeaders term
+
+P: sectionTableOffset <- ADD HEADER.e_lfanew (ADD progHeader.SizeOfOptionalHeader 24)
+P: nSections <- progHeader.NumberOfSections
+L1: section <- LOOP(HEADER, sectionTableOffset, (sizeof _IMAGE_SECTION_HEADER), nSections, 10) AS _IMAGE_SECTION_HEADER
+    # lines 469, 470
+    P: virtSize <- section.VirtualSize
+    P: sizeRawData <- section.SizeOfRawData
+    P: sectionSize <- virtSize
+    V23: Eq virtSize 0
+    P(V23): sectionSize <- sizeRawData
+    V24: UGE (ADD sizeRawData section.PointerToRawData) section.PointerToRawData term
+    V25: EQ section.PointerToRawData section.VirtualAddress term
+    V26: ULE sectionSize sizeRawData term
+END L1
+
+# CreateProcessInternalW:980
+V27: UGT optHdr.MajorSubsystemVersion 3 term
+
+# Do not consider POSIX subsystem for now
+# CreateProcessInternalW:987
+V28: OR EQ optHdr.Subsystem 2 EQ optHdr.Subsystem 3 term
+
+# BaseIsImageVersionOK
+V29: AND AND AND UGE optHdr.MajorSubsystemVersion 3 (OR (NEq optHdr.MajorSubsystemVersion 3) (UGE optHdr.MinorSubsystemVersion 0xa)) (ULE optHdr.MajorSubsystemVersion 5) (OR NEq optHdr.MajorSubsystemVersion 5 ULE optHdr.MinorSubsystemVersion 1) term
+
+# LdrpInitializeProcess
