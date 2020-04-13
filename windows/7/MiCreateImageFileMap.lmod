@@ -1,0 +1,140 @@
+LOADREL ntkrnlmp
+
+DEFINE FILESIZE 2000
+
+INPUT HEADER FILESIZE as DOSHeader
+
+#### Handy constant
+P: zero <- INT 0 4
+
+V1: AND EQ HEADER.magic[0] "M" EQ HEADER.magic[1] "Z" term
+V2: ULE (ADD HEADER.e_lfanew 0xf8) 0x1000 term
+
+# MiVerifyImageHeader
+P: NT_HEADER <- HEADER[HEADER.e_lfanew, sizeof _IMAGE_NT_HEADERS] as _IMAGE_NT_HEADERS
+V3: EQ NT_HEADER.Signature 0x4550  term
+
+#### Start of MiVerifyImageHeader
+P: progHeader <- NT_HEADER.FileHeader as _IMAGE_FILE_HEADER
+V4: NEq progHeader.Machine 0 term
+V5: NEq progHeader.SizeOfOptionalHeader 0 term
+
+V6: NEq (BITAND progHeader.Characteristics 2) 0 term
+V7: Eq (BITAND HEADER.e_lfanew 3) 0 term
+
+P: optHdr <- NT_HEADER.OptionalHeader as _IMAGE_OPTIONAL_HEADER
+V8: Eq optHdr.Magic 0x10b term
+
+V9: OR (EQ (BITAND optHdr.FileAlignment 0x1ff) 0) (EQ optHdr.SectionAlignment optHdr.FileAlignment) term
+V10: NEq optHdr.FileAlignment 0 term
+V11: ISPOW2 optHdr.SectionAlignment term
+V12: ISPOW2 optHdr.FileAlignment term
+V13: UGE optHdr.SectionAlignment optHdr.FileAlignment term
+V14: ULE optHdr.SizeOfImage 0x77000000 term
+V15: ULE progHeader.NumberOfSections 0x60 term
+V16: Eq progHeader.Machine 0x14c term
+#### End of MiVerifyImageHeader
+
+## MiCreateImageFileMap:292
+V17: ULT optHdr.SizeOfHeaders optHdr.SizeOfImage term
+
+V18: NEq 0 ADD (SHR optHdr.SizeOfImage 12) (BITAND optHdr.SizeOfImage 0xfff) term
+
+V19: Eq 0 BITAND optHdr.ImageBase 0xffff term
+
+## MiCreateImageFileMap:324
+P: sectTableSize <- MUL progHeader.NumberOfSections 40
+P: totalSizeHdrs <- ADD zero ADD sectTableSize ADD progHeader.SizeOfOptionalHeader 0x18
+V20: ULT totalSizeHdrs optHdr.SizeOfImage term
+
+### tmp
+V98: ULT totalSizeHdrs 0x1000 term
+
+## Start of MiBuildImageControlArea
+### line 51
+P: nPages <- SHR optHdr.SizeOfImage 12
+V21: NEq (BITAND optHdr.SizeOfImage 0xfff) 0
+P(V21): nPages <- Add nPages 1
+
+### line 139
+V22: NEq optHdr.SizeOfHeaders 0 term
+### line 142
+P: lastByteInHeaderSection <- ADD optHdr.SectionAlignment (SUB optHdr.SizeOfHeaders 1)
+V23: UGT lastByteInHeaderSection optHdr.SizeOfHeaders term
+### line 145
+P: nPagesHdrs <- ADD (BITAND (SHR lastByteInHeaderSection 12) (SHR (BITNOT (SUB optHdr.SectionAlignment 1)) 12)) (SHR (ADD (BITAND (BITAND optHdr.SectionAlignment (BITNOT (SUB optHdr.SectionAlignment 1))) 0xfff) 0xfff) 12)
+V24: ULE nPagesHdrs nPages term
+P: nPagesSections <- SUB nPages nPagesHdrs
+
+## Start of MiParseImageSectionHeaders
+### line 60 (should be very much the same also for line 226)
+P: sectionTableOffset <- ADD HEADER.e_lfanew (ADD progHeader.SizeOfOptionalHeader 24)
+P: nSections <- progHeader.NumberOfSections
+
+V25: UGE optHdr.SectionAlignment 0x1000
+
+V26(V25): NEq nSections 0 term
+P: tmpNpages <- nPagesSections
+P: lastSectionEnd <- ADD optHdr.ImageBase MUL nPagesHdrs 4096
+
+L1: section <- LOOP(HEADER, sectionTableOffset, 40, nSections, 10) AS _IMAGE_SECTION_HEADER
+
+    ### Line 62
+    V27(V25): AND (NEq BITAND section.Characteristics 0x10000000 0) (OR (EQ (BITAND section.Characteristics 0x20000000) 0) (LT section.Characteristics 0))
+    P: sectionSize <- section.VirtualSize
+
+
+    ### This is equal, independently from sectionAlignement
+    V28: Eq section.VirtualSize 0
+    P(V28): sectionSize <- section.SizeOfRawData
+    V29: UGE (ADD section.PointerToRawData section.SizeOfRawData) section.SizeOfRawData term
+    ### temp
+    V99: ULT sectionSize 0x3000 term
+
+    ### Line 87
+    V30(V25): AND (Eq lastSectionEnd (ADD optHdr.ImageBase section.VirtualAddress)) (NEq sectionSize 0) term
+
+    ### Line 94
+    P(V25): sizePlusAlign <- (ADD optHdr.SectionAlignment (SUB sectionSize 1))
+    V31: UGT sizePlusAlign sectionSize term
+
+    ### line 101
+    P(V25): nPtes <- BITAND (SHR sizePlusAlign 12) (SHR (BITNOT (SUB optHdr.SectionAlignment 1)) 12)
+    V32(V25): ULE nPtes tmpNpages term
+    P(V25): tmpNpages <- SUB tmpNpages nPtes
+
+    ### line 118
+    P(V25): alignedEnd <- ALIGNUP (ADD section.SizeOfRawData section.PointerToRawData) optHdr.FileAlignment
+    V33(V25): UGE alignedEnd section.PointerToRawData term
+
+    ### line 193
+    P(V25): lastSectionEnd <- ADD lastSectionEnd MUL nPtes 4096
+
+    P(V25): endOfRawData <- ADD section.SizeOfRawData section.PointerToRawData
+    ### avoid overflow when adding
+    V34(V25): UGT (SUB 0xffffffff section.SizeOfRawData) section.PointerToRawData term
+
+
+   ### line 227 - reach here only if sectionAlignment is < 0x1000
+   V35(!V25): AND (EQ section.PointerToRawData section.VirtualAddress) (ULE sectionSize section.SizeOfRawData) term
+
+END L1
+
+V36(V25): ULE endOfRawData FILESIZE term
+V37(V25): ULT tmpNpages (SHR optHdr.SectionAlignment 12) term
+
+## End of MiParseImageSectionHeaders
+## End of MiBuildImageControlArea
+
+### All the other failure conditions in MiCreateImageFileMap depend on IO
+## End of MiCreateImageFileMap
+
+### LdrResSearchResource: line 18
+V38: NEq optHdr.ImageBase 0 term
+
+### The following avoid the image to be relocate
+V39: Eq BITAND optHdr.ImageBase 0xfff00000 0 term
+V40: Eq BITAND optHdr.SizeOfImage 0xfff00000 0 term
+
+### Avoid sections witouth constraints
+V41: ULE nSections 10 term
