@@ -138,3 +138,9 @@ V40: Eq BITAND optHdr.SizeOfImage 0xfff00000 0 term
 
 ### Avoid sections witouth constraints
 V41: ULE nSections 10 term
+
+# CreateProcessInternalW:829
+V42: OR EQ optHdr.Subsystem 2 EQ optHdr.Subsystem 3 term
+
+# BasepCheckImageVersion
+V43: AND AND AND (UGE optHdr.MajorSubsystemVersion 3) (OR (NEq optHdr.MajorSubsystemVersion 3) (UGE optHdr.MinorSubsystemVersion 0xa)) (ULE optHdr.MajorSubsystemVersion 6) (OR (NEq optHdr.MajorSubsystemVersion 6) (ULE optHdr.MinorSubsystemVersion 1)) term
