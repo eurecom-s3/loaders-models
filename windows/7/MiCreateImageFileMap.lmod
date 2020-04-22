@@ -88,8 +88,9 @@ L1: section <- LOOP(HEADER, sectionTableOffset, 40, nSections, 10) AS _IMAGE_SEC
     V28: Eq section.VirtualSize 0
     P(V28): sectionSize <- section.SizeOfRawData
     V29: UGE (ADD section.PointerToRawData section.SizeOfRawData) section.SizeOfRawData term
+
     ### temp
-    V99: ULT sectionSize 0x3000 term
+    V99: ULT sectionSize 0xf0000 term
 
     ### Line 87
     V30(V25): AND (Eq lastSectionEnd (ADD optHdr.ImageBase section.VirtualAddress)) (NEq sectionSize 0) term
@@ -133,7 +134,7 @@ V37(V25): ULT tmpNpages (SHR optHdr.SectionAlignment 12) term
 V38: NEq optHdr.ImageBase 0 term
 
 ### The following avoid the image to be relocate
-V39: Eq BITAND optHdr.ImageBase 0xfff00000 0 term
+V39: Eq BITAND optHdr.ImageBase 0xff000000 0 term
 V40: Eq BITAND optHdr.SizeOfImage 0xfff00000 0 term
 
 ### Avoid sections witouth constraints
