@@ -1,6 +1,7 @@
 LOADREL ntkrnlmp
 
-INPUT HEADER 2000 as DOSHeader
+DEFINE FILESIZE 2000
+INPUT HEADER FILESIZE as DOSHeader
 
 V1: AND EQ HEADER.magic[0] "M" EQ HEADER.magic[1] "Z" term
 V2: ULE (ADD HEADER.e_lfanew 0xf8) 0x1000 term
@@ -42,18 +43,25 @@ V17: NEq optHdr.SizeOfImage 0 term
 # MiCreateImageFileMap:337
 V18: Eq (BITAND optHdr.ImageBase 0xffff) 0 term
 
-# MiCreateImageFileMap:337
+# MiCreateImageFileMap:341
 V19: ULT optHdr.SizeOfHeaders optHdr.SizeOfImage term
 
 # MiCreateImageFileMap:406 else branch
 V20: UGE optHdr.SectionAlignment 0x1000
 V21(V20): NEq optHdr.SizeOfHeaders 0 term
 
-# MiCreateImageFileMap (defined at 341, used at 403)
+# MiCreateImageFileMap (defined at 345, condition at 409)
 P: lastByteInHeaderSection <- ADD optHdr.SectionAlignment (SUB optHdr.SizeOfHeaders 1)
 V22(V20): UGT lastByteInHeaderSection optHdr.SizeOfHeaders term
 
-P: nPagesHdrs <- ADD (BITAND (SHR lastByteInHeaderSection 12) (SHR (BITNOT (SUB optHdr.SectionAlignment 1)) 12)) (SHR (ADD (BITAND (BITAND optHdr.SectionAlignment (BITNOT (SUB optHdr.SectionAlignment 1))) 0xfff) 0xfff) 12)
+P: sectionAlignPageMask <- SHR (BITNOT SUB optHdr.SectionAlignment 1) 12
+P: nPagesHdrs <- BITAND sectionAlignPageMask SHR lastByteInHeaderSection 12
+# line 369
+P(!V20): nPagesHdrs <- npages
+
+# line 412
+V99(V20): ULE nPagesHdrs npages term
+
 P: nPagesSections <- SUB npages nPagesHdrs
 P: lastSectionEnd <- ADD optHdr.ImageBase MUL nPagesHdrs 4096
 P: tmpNpages <- nPagesSections
@@ -103,5 +111,10 @@ V32: OR EQ optHdr.Subsystem 2 EQ optHdr.Subsystem 3 term
 
 # BaseIsImageVersionOK
 V33: AND AND AND UGE optHdr.MajorSubsystemVersion 3 (OR (NEq optHdr.MajorSubsystemVersion 3) (UGE optHdr.MinorSubsystemVersion 0xa)) (ULE optHdr.MajorSubsystemVersion 5) (OR NEq optHdr.MajorSubsystemVersion 5 ULE optHdr.MinorSubsystemVersion 1) term
+
+### this is an implicit condition introduced by io operations like linen 776-783
+P: zero <- INT 0 4
+V34: ULT (BITAND (ADD ADD ADD zero progHeader.SizeOfOptionalHeader 24 HEADER.e_lfanew) 0xFFFFF000) FILESIZE term
+
 
 # LdrpInitializeProcess
