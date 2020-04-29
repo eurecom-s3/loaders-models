@@ -68,6 +68,8 @@ P: tmpNpages <- nPagesSections
 
 P: sectionTableOffset <- ADD HEADER.e_lfanew (ADD progHeader.SizeOfOptionalHeader 24)
 P: nSections <- progHeader.NumberOfSections
+# This avoids unconstrained sections
+V98: ULT nSections 10 term
 L1: section <- LOOP(HEADER, sectionTableOffset, (sizeof _IMAGE_SECTION_HEADER), nSections, 10) AS _IMAGE_SECTION_HEADER
 
     # lines (469, 470), and (492, 494)
@@ -92,7 +94,8 @@ L1: section <- LOOP(HEADER, sectionTableOffset, (sizeof _IMAGE_SECTION_HEADER), 
 
 
     # line 525
-    P(V20): alignedEnd <- ALIGNUP (ADD section.SizeOfRawData section.PointerToRawData) optHdr.FileAlignment
+    P(V20): rawDataEnd <- ADD section.SizeOfRawData section.PointerToRawData
+    P(V20): alignedEnd <- ALIGNUP rawDataEnd optHdr.FileAlignment
     V27(V20): UGE alignedEnd section.PointerToRawData term
 
     # line 517
@@ -100,21 +103,44 @@ L1: section <- LOOP(HEADER, sectionTableOffset, (sizeof _IMAGE_SECTION_HEADER), 
     V28(V20): ULE nPtes tmpNpages term
     P(V20): tmpNpages <- SUB tmpNpages nPtes
 
+    # line 473
     V29(!V20): UGE (ADD sizeRawData section.PointerToRawData) section.PointerToRawData term
     V30(!V20): EQ section.PointerToRawData section.VirtualAddress term
     V31(!V20): ULE sectionSize sizeRawData term
 END L1
 
+# line 602
+V32(V20): NEq nSections 0 term
+V33(V20): ULE rawDataEnd FILESIZE term
+V34(V20): ULT tmpNpages (SHR optHdr.SectionAlignment 12) term
+
 # Do not consider POSIX subsystem for now
 # CreateProcessInternalW:987
-V32: OR EQ optHdr.Subsystem 2 EQ optHdr.Subsystem 3 term
+V35: OR EQ optHdr.Subsystem 2 EQ optHdr.Subsystem 3 term
 
 # BaseIsImageVersionOK
-V33: AND AND AND UGE optHdr.MajorSubsystemVersion 3 (OR (NEq optHdr.MajorSubsystemVersion 3) (UGE optHdr.MinorSubsystemVersion 0xa)) (ULE optHdr.MajorSubsystemVersion 5) (OR NEq optHdr.MajorSubsystemVersion 5 ULE optHdr.MinorSubsystemVersion 1) term
+V36: AND AND AND UGE optHdr.MajorSubsystemVersion 3 (OR (NEq optHdr.MajorSubsystemVersion 3) (UGE optHdr.MinorSubsystemVersion 0xa)) (ULE optHdr.MajorSubsystemVersion 5) (OR NEq optHdr.MajorSubsystemVersion 5 ULE optHdr.MinorSubsystemVersion 1) term
 
 ### this is an implicit condition introduced by io operations like linen 776-783
 P: zero <- INT 0 4
-V34: ULT (BITAND (ADD ADD ADD zero progHeader.SizeOfOptionalHeader 24 HEADER.e_lfanew) 0xFFFFF000) FILESIZE term
+P: endOfOptHdr <- ADD ADD (ADD zero progHeader.SizeOfOptionalHeader) 24 HEADER.e_lfanew
+P: endOfAllHdrs <- ADD endOfOptHdr MUL nSections 40
+V37: ULT (BITAND endOfOptHdr 0xFFFFF000) FILESIZE term
+V38: ULT endOfAllHdrs optHdr.SizeOfImage term
+V39: ULT optHdr.SizeOfImage FILESIZE term
 
+# MmCreatePeb
+## This function, among other things, dereferences some fields
+## in the LOAD_CONFIG directory
+P: loadConfigDir <- optHdr.DataDirectory[80, 8] as _IMAGE_DATA_DIRECTORY
+P: loadConfigVA <- loadConfigDir.VirtualAddress
+V40: Eq BITAND loadConfigVA 3 0 term
+P: loadConfig <- HEADER[loadConfigVA, 0x40] as _IMAGE_LOAD_CONFIG_DIRECTORY
+V41: ULT (ADD loadConfigVA 0x40) optHdr.SizeOfImage term
+
+# BasepSxsCreateProcessCsrMessage
+## Resource directory
+P: resDir <- optHdr.DataDirectory[16, 8] as _IMAGE_DATA_DIRECTORY
+V42: Eq resDir 0 term
 
 # LdrpInitializeProcess

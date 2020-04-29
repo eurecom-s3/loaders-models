@@ -127,3 +127,25 @@ typedef struct
   unsigned __int16 NumberOfLinenumbers;
   unsigned int Characteristics;
 } _IMAGE_SECTION_HEADER;
+
+typedef struct
+{
+  unsigned int Characteristics;
+  unsigned int TimeDateStamp;
+  unsigned __int16 MajorVersion;
+  unsigned __int16 MinorVersion;
+  unsigned int GlobalFlagsClear;
+  unsigned int GlobalFlagsSet;
+  unsigned int CriticalSectionDefaultTimeout;
+  unsigned int DeCommitFreeBlockThreshold;
+  unsigned int DeCommitTotalFreeThreshold;
+  unsigned int LockPrefixTable;
+  unsigned int MaximumAllocationSize;
+  unsigned int VirtualMemoryThreshold;
+  unsigned int ProcessHeapFlags;
+  unsigned int ProcessAffinityMask;
+  unsigned __int16 CSDVersion;
+  unsigned __int16 Reserved1;
+  unsigned int EditList;
+  unsigned int Reserved[1];
+} _IMAGE_LOAD_CONFIG_DIRECTORY;
