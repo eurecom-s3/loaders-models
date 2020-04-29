@@ -1,6 +1,6 @@
 LOADREL ntkrnlmp
 
-DEFINE FILESIZE 2000
+DEFINE FILESIZE 500
 INPUT HEADER FILESIZE as DOSHeader
 
 V1: AND EQ HEADER.magic[0] "M" EQ HEADER.magic[1] "Z" term
@@ -127,6 +127,7 @@ P: endOfOptHdr <- ADD ADD (ADD zero progHeader.SizeOfOptionalHeader) 24 HEADER.e
 P: endOfAllHdrs <- ADD endOfOptHdr MUL nSections 40
 V37: ULT (BITAND endOfOptHdr 0xFFFFF000) FILESIZE term
 V38: ULT endOfAllHdrs optHdr.SizeOfImage term
+# This may not be accurate
 V39: ULT optHdr.SizeOfImage FILESIZE term
 
 # MmCreatePeb
