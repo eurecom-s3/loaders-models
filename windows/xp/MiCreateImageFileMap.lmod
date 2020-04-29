@@ -69,7 +69,7 @@ P: tmpNpages <- nPagesSections
 P: sectionTableOffset <- ADD HEADER.e_lfanew (ADD progHeader.SizeOfOptionalHeader 24)
 P: nSections <- progHeader.NumberOfSections
 # This avoids unconstrained sections
-V98: ULT nSections 10 term
+G98: ULT nSections 10 term
 L1: section <- LOOP(HEADER, sectionTableOffset, (sizeof _IMAGE_SECTION_HEADER), nSections, 10) AS _IMAGE_SECTION_HEADER
 
     # lines (469, 470), and (492, 494)
