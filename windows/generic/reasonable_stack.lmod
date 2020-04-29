@@ -1,0 +1,17 @@
+LOADREL ntkrnlmp
+
+DEFINE FILESIZE 2000
+INPUT HEADER FILESIZE as DOSHeader
+
+P: NT_HEADER <- HEADER[HEADER.e_lfanew, sizeof _IMAGE_NT_HEADERS] as _IMAGE_NT_HEADERS
+P: optHdr <- NT_HEADER.OptionalHeader as _IMAGE_OPTIONAL_HEADER
+
+P: stackCommit <- optHdr.SizeOfStackCommit
+P: stackReserve <- optHdr.SizeOfStackReserve
+P: heapReserve <- optHdr.SizeOfHeapReserve
+P: heapCommit <- optHdr.SizeOfHeapCommit
+
+V1: ULT stackCommit 0x50000 term
+V2: ULT stackReserve 0x50000 term
+V3: ULT heapReserve 0x50000 term
+V4: ULT heapCommit 0x50000 term
