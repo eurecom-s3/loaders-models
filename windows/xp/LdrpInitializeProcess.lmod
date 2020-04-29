@@ -1,0 +1,82 @@
+LOADREL ntkrnlmp
+
+DEFINE FILESIZE 2000
+INPUT HEADER FILESIZE as DOSHeader
+
+P: NT_HEADER <- HEADER[HEADER.e_lfanew, sizeof _IMAGE_NT_HEADERS] as _IMAGE_NT_HEADERS
+P: fileHdr <- NT_HEADER.FileHeader as _IMAGE_FILE_HEADER
+P: optHdr <- NT_HEADER.OptionalHeader as _IMAGE_OPTIONAL_HEADER
+P: imageEnd <- ADD optHdr.ImageBase optHdr.SizeOfImage
+
+
+### Section alignment condition
+### If SectionAlign < 0x1000, the image is mapped as is,
+### using ImageBase and SizeOfImage only.
+### Otherwise, each section is mapped at its own address
+V1: UGE optHdr.SectionAlignment 0x1000
+
+P: tlsDir <- optHdr.DataDirectory[72, 8] as _IMAGE_DATA_DIRECTORY
+P: tlsDirEnd <- ADD tlsDir.VirtualAddress tlsDir.Size
+
+### TLS is not mandatory
+V2: AND (UGT optHdr.NumberOfRvaAndSizes 9) (NEq tlsDir.VirtualAddress 0)
+### Condition for a valid TLS table
+V3(V2): ULE tlsDirEnd imageEnd term
+
+
+
+### Relocations
+#### They come into play only if the image needs to be relocated.
+#### This means that the ImageBase is either 0 or in the range of other DLLs
+V4: OR (Eq optHdr.ImageBase 0) (UGE optHdr.ImageBase 0x70000000)
+
+P: relocDir <- optHdr.DataDirectory[40, 8] as _IMAGE_DATA_DIRECTORY
+P: relocVA <- relocDir.VirtualAddress
+P: relocSize <- relocDir.Size
+
+#### LdrRelocateImageWithBias:32
+V5(V4): AND (AND NEq relocVA 0 NEq relocSize 0) ULT relocVA imageEnd
+
+### If the image is relocated, but doesn't have the reloc table, check that it wasn't stripped away, in which case the image is invalid
+#### LdrRelocateImageWithBias:55
+V6(V4, !V5): Eq BITAND fileHdr.Characteristics 0x1 0 term
+
+P: tmpSize <- relocSize
+P(V5): loopStart <- relocVA
+L1(V5): relocBlockAddr <- VLOOP(loopStart, nextBlockAddr, V99, 5)
+    P: relocBlock <- HEADER[relocBlockAddr, 8]
+    P: blockSize <- relocBlock[4, 3]
+    P: blockPage <- relocBlock[0, 3]
+    P: firstEntryAddr <- ADD relocBlockAddr 8
+    P: nEntry <- SHR (SUB blockSize 8) 2
+    P: tmpSize <- SUB tmpSize blockSize
+    P: nextBlockAddr <- ADD relocBlockAddr blockSize
+    V99: UGT tmpSize 0
+
+    P: tmpEntry <- INT 0 4
+    L2: entryAddr <- VLOOP(firstEntryAddr, nextBAddr, V98, 5)
+        P: entry <- HEADER[entryAddr, 2]
+        P: tmpEntry <- ADD tmpEntry 1
+        P: nextBAddr <- ADD entryAddr 2
+
+        P: relocType <- BITAND entry[0] 0xf
+        P: relocAddr <- SHR (BITAND entry 0xfff0) 4
+
+        V7: AND ULE relocType 10 NEq relocType 8 term
+        V8: ULT ADD blockPage relocAddr imageEnd term
+
+        ## RelocType 4 uses two entries instead of 1
+        V9: Eq relocType 4
+        P(V9): tmpEntry <- ADD tmpEntry 1
+        P(V9): nextBAddr <- ADD nextBAddr 2
+
+        V98: ULE tmpEntry nEntry
+    END L2
+
+END L1
+
+
+### LdrpCheckForSafeDiscImage
+#### Implicit constraints due to dereferencing fields in the headers
+V10: GT SUB optHdr.SizeOfHeaders 0x2c 0 term
+V11: ULT ADD optHdr.SizeOfHeaders 0x13 FILESIZE term
