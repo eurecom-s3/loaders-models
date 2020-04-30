@@ -149,3 +149,15 @@ typedef struct
   unsigned int EditList;
   unsigned int Reserved[1];
 } _IMAGE_LOAD_CONFIG_DIRECTORY;
+
+typedef struct
+{
+  unsigned int Characteristics;
+  unsigned int TimeDateStamp;
+  unsigned __int16 MajorVersion;
+  unsigned __int16 MinorVersion;
+  unsigned int Type;
+  unsigned int SizeOfData;
+  unsigned int AddressOfRawData;
+  unsigned int PointerToRawData;
+} _IMAGE_DEBUG_DIRECTORY;
