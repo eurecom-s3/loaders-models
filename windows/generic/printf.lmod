@@ -1,0 +1,14 @@
+LOADREL ntkrnlmp
+
+DEFINE FILESIZE 500
+INPUT HEADER FILESIZE as DOSHeader
+
+P: NT_HEADER <- HEADER[HEADER.e_lfanew, sizeof _IMAGE_NT_HEADERS] as _IMAGE_NT_HEADERS
+P: optHdr <- NT_HEADER.OptionalHeader as _IMAGE_OPTIONAL_HEADER
+
+## Must be Windows CUI to use printf
+V1: EQ optHdr.Subsystem 3 term
+
+P: entryPoint <- optHdr.AddressOfEntryPoint
+
+FROMFILE x86printf HEADER entryPoint 0 90
