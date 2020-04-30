@@ -4,7 +4,7 @@ DEFINE FILESIZE 500
 INPUT HEADER FILESIZE as DOSHeader
 
 V1: AND EQ HEADER.magic[0] "M" EQ HEADER.magic[1] "Z" term
-V2: ULE (ADD HEADER.e_lfanew 0xf8) 0x1000 term
+V2: ULE (ADD HEADER.e_lfanew 0xf8) FILESIZE term
 
 # MiVerifyImageHeader
 P: NT_HEADER <- HEADER[HEADER.e_lfanew, sizeof _IMAGE_NT_HEADERS] as _IMAGE_NT_HEADERS
@@ -69,8 +69,8 @@ P: tmpNpages <- nPagesSections
 P: sectionTableOffset <- ADD HEADER.e_lfanew (ADD progHeader.SizeOfOptionalHeader 24)
 P: nSections <- progHeader.NumberOfSections
 # This avoids unconstrained sections
-G98: ULT nSections 10 term
-L1: section <- LOOP(HEADER, sectionTableOffset, (sizeof _IMAGE_SECTION_HEADER), nSections, 10) AS _IMAGE_SECTION_HEADER
+G98: ULT nSections 5 term
+L1: section <- LOOP(HEADER, sectionTableOffset, (sizeof _IMAGE_SECTION_HEADER), nSections, 5) AS _IMAGE_SECTION_HEADER
 
     # lines (469, 470), and (492, 494)
     P: virtSize <- section.VirtualSize
