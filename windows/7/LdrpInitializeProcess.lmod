@@ -1,0 +1,41 @@
+LOADREL ntkrnlmp
+
+DEFINE FILESIZE 500
+INPUT HEADER FILESIZE as DOSHeader
+
+P: NT_HEADER <- HEADER[HEADER.e_lfanew, sizeof _IMAGE_NT_HEADERS] as _IMAGE_NT_HEADERS
+P: fileHdr <- NT_HEADER.FileHeader as _IMAGE_FILE_HEADER
+P: optHdr <- NT_HEADER.OptionalHeader as _IMAGE_OPTIONAL_HEADER
+P: imageEnd <- ADD optHdr.ImageBase optHdr.SizeOfImage
+P: nSections <- fileHdr.NumberOfSections
+P: sectionTableOffset <- ADD HEADER.e_lfanew (ADD fileHdr.SizeOfOptionalHeader 24)
+
+## Needs relocation?
+V1: UGE optHdr.ImageBase 0x70000000
+
+### LdrpProtectAndRelocateImage -> LdrpSetProtection
+#### If the image is relocated, each section is unprotected to apply relocations. This means that if the sections are not mapped (e.g., their VA is beyond ImageBase+SizeOfImage,) they must be RW- so their permission are not updated, causing a conflicting address error to be raised.
+
+G1: ULE nSections 5 term
+G99: NEq nSections 0 term
+L1(V1): section <- LOOP(HEADER, sectionTableOffset, 40, nSections, 5) AS _IMAGE_SECTION_HEADER
+    P: size <- section.SizeOfRawData
+    P: VA <- section.VirtualAddress
+    P: endSect <- ADD VA (ALIGNUP size optHdr.SectionAlignment)
+    P: charact <- section.Characteristics
+    V2: AND (OR (ULT VA optHdr.ImageBase) (UGT endSect imageEnd)) (NEq size 0)
+    V3(V2): EQ (BITAND charact[3] 0x80) 0x80 term
+END L1
+
+### LdrpLoadDll
+#### The image should end before 0x70000000 because the area beyond that address is reserved for libraries. This means that is the image is relocated (to address 0x10000,) SizeOfImage shold be less than 0x70000000-0x10000. Otherwise ImageBase+SizeOfImage < 0x70000000
+V4(V1): ULT optHdr.SizeOfImage 0x6fff0000 term
+V5(!V1): ULT imageEnd 0x70000000 term
+
+### LdrpInitializeTls
+#### If the directory is defined it must lay inside the image
+P: tlsDir <- optHdr.DataDirectory[72, 8] as _IMAGE_DATA_DIRECTORY
+P: tlsDirEnd <- ADD tlsDir.VirtualAddress tlsDir.Size
+V6: AND (UGT optHdr.NumberOfRvaAndSizes 9) (NEq tlsDir.VirtualAddress 0)
+V7(V6): UGT (SUB 0xffffffff tlsDir.VirtualAddress) tlsDir.Size term
+V8(V6): ULE tlsDirEnd imageEnd term
