@@ -8,7 +8,7 @@ INPUT HEADER FILESIZE as DOSHeader
 P: zero <- INT 0 4
 
 V1: AND EQ HEADER.magic[0] "M" EQ HEADER.magic[1] "Z" term
-V2: ULE (ADD HEADER.e_lfanew 0xf8) 0x1000 term
+V2: ULE (ADD HEADER.e_lfanew 0xf8) FILESIZE term
 
 # MiVerifyImageHeader
 P: NT_HEADER <- HEADER[HEADER.e_lfanew, sizeof _IMAGE_NT_HEADERS] as _IMAGE_NT_HEADERS
@@ -44,11 +44,11 @@ V19: Eq 0 BITAND optHdr.ImageBase 0xffff term
 
 ## MiCreateImageFileMap:324
 P: sectTableSize <- MUL progHeader.NumberOfSections 40
-P: totalSizeHdrs <- ADD zero ADD sectTableSize ADD progHeader.SizeOfOptionalHeader 0x18
+P: totalSizeHdrs <- ADD progHeader.SizeOfOptionalHeader ADD sectTableSize ADD zero 0x18
 V20: ULT totalSizeHdrs optHdr.SizeOfImage term
 
-### tmp
-V98: ULT totalSizeHdrs 0x1000 term
+### MiCreateImageFileMap:370
+V98: ULT (ADD totalSizeHdrs HEADER.e_lfanew) FILESIZE term
 
 ## Start of MiBuildImageControlArea
 ### line 51
@@ -73,11 +73,11 @@ P: nSections <- progHeader.NumberOfSections
 
 V25: UGE optHdr.SectionAlignment 0x1000
 
-V26(V25): NEq nSections 0 term
+G26(V25): NEq nSections 0 term
 P: tmpNpages <- nPagesSections
 P: lastSectionEnd <- ADD optHdr.ImageBase MUL nPagesHdrs 4096
 
-L1: section <- LOOP(HEADER, sectionTableOffset, 40, nSections, 10) AS _IMAGE_SECTION_HEADER
+L1: section <- LOOP(HEADER, sectionTableOffset, 40, nSections, 5) AS _IMAGE_SECTION_HEADER
 
     ### Line 62
     V27(V25): AND (NEq BITAND section.Characteristics 0x10000000 0) (OR (EQ (BITAND section.Characteristics 0x20000000) 0) (LT section.Characteristics 0))
@@ -97,7 +97,7 @@ L1: section <- LOOP(HEADER, sectionTableOffset, 40, nSections, 10) AS _IMAGE_SEC
 
     ### Line 94
     P(V25): sizePlusAlign <- (ADD optHdr.SectionAlignment (SUB sectionSize 1))
-    V31: UGT sizePlusAlign sectionSize term
+    V31(V25): UGT sizePlusAlign sectionSize term
 
     ### line 101
     P(V25): nPtes <- BITAND (SHR sizePlusAlign 12) (SHR (BITNOT (SUB optHdr.SectionAlignment 1)) 12)
@@ -134,14 +134,31 @@ V37(V25): ULT tmpNpages (SHR optHdr.SectionAlignment 12) term
 V38: NEq optHdr.ImageBase 0 term
 
 ### The following avoid the image to be relocate
-V39: Eq BITAND optHdr.ImageBase 0xff000000 0 term
-V40: Eq BITAND optHdr.SizeOfImage 0xfff00000 0 term
+#V39: Eq BITAND optHdr.ImageBase 0xff000000 0 term
+#V40: Eq BITAND optHdr.SizeOfImage 0xfff00000 0 term
 
 ### Avoid sections witouth constraints
-V41: ULE nSections 10 term
+G41: ULE nSections 5 term
 
 # CreateProcessInternalW:829
 V42: OR EQ optHdr.Subsystem 2 EQ optHdr.Subsystem 3 term
 
 # BasepCheckImageVersion
 V43: AND AND AND (UGE optHdr.MajorSubsystemVersion 3) (OR (NEq optHdr.MajorSubsystemVersion 3) (UGE optHdr.MinorSubsystemVersion 0xa)) (ULE optHdr.MajorSubsystemVersion 6) (OR (NEq optHdr.MajorSubsystemVersion 6) (ULE optHdr.MinorSubsystemVersion 1)) term
+
+# MmCreatePeb
+## This function, among other things, dereferences some fields
+## in the LOAD_CONFIG directory
+P: loadConfigDir <- optHdr.DataDirectory[80, 8] as _IMAGE_DATA_DIRECTORY
+P: loadConfigVA <- loadConfigDir.VirtualAddress
+V44: Eq BITAND loadConfigVA 3 0 term
+P: loadConfig <- HEADER[loadConfigVA, 0x40] as _IMAGE_LOAD_CONFIG_DIRECTORY
+V45: ULT (ADD loadConfigVA 0x40) optHdr.SizeOfImage term
+
+# PspAllocateProcess:245
+### Checks that the header is not marked as DLL
+V46: Eq (BITAND progHeader.Characteristics 0x2000) 0 term
+
+# SeValidateImageHeader
+### Check hash if FORCE_INTEGRITY bit is set
+G47: EQ (BITAND optHdr.DllCharacteristics 0x80) 0 term
