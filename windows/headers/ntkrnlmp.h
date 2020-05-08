@@ -161,3 +161,12 @@ typedef struct
   unsigned int AddressOfRawData;
   unsigned int PointerToRawData;
 } _IMAGE_DEBUG_DIRECTORY;
+
+typedef struct
+{
+  unsigned int OriginalFirstThunk;
+  unsigned int TimeDateStamp;
+  unsigned int ForwarderChain;
+  unsigned int Name;
+  unsigned int FirstThunk;
+} _IMAGE_IMPORT_DESCRIPTOR;

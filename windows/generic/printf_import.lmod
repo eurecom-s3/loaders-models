@@ -1,0 +1,45 @@
+LOADREL ntkrnlmp
+
+DEFINE FILESIZE 500
+INPUT HEADER FILESIZE as DOSHeader
+
+P: NT_HEADER <- HEADER[HEADER.e_lfanew, sizeof _IMAGE_NT_HEADERS] as _IMAGE_NT_HEADERS
+P: optHdr <- NT_HEADER.OptionalHeader as _IMAGE_OPTIONAL_HEADER
+P: entryPoint <- optHdr.AddressOfEntryPoint
+P: imageBase <- optHdr.ImageBase
+P: imageEnd <- ADD imageBase optHdr.SizeOfImage
+
+## Must be Windows CUI to use printf
+G1: EQ optHdr.Subsystem 3 term
+
+## SectionAlignment < 0x1000 prevents import table to be scattered at random addresses
+G2: ULT optHdr.SectionAlignment 0x1000 term
+G3: UGE optHdr.NumberOfRvaAndSizes 2 term
+
+## Prepare import directory
+P: importDir <- optHdr.DataDirectory[8, 8] as _IMAGE_DATA_DIRECTORY
+P: importVA  <- importDir.VirtualAddress
+P: importSize <- importDir.Size
+G4: ULT ADD importVA importSize imageEnd term
+G5: EQ importSize 8 term
+
+P: importEntry1 <- HEADER[importVA, sizeof _IMAGE_IMPORT_DESCRIPTOR] as _IMAGE_IMPORT_DESCRIPTOR
+G6: ULT importEntry1.OriginalFirstThunk imageEnd term
+G7: EQ importEntry1.TimeDateStamp 0 term
+G8: STRCMP HEADER importEntry1.Name 'msvcrt.dll\x00' term
+G9: EQ importEntry1.FirstThunk SUB entryPoint 8 term
+P: nullEntry <- HEADER[ADD importVA sizeof _IMAGE_IMPORT_DESCRIPTOR, sizeof _IMAGE_IMPORT_DESCRIPTOR]
+G10: EQ nullEntry 0 term
+
+P: lookupTable <- HEADER[importEntry1.OriginalFirstThunk, 8]
+P: addressTable <- HEADER[importEntry1.FirstThunk, 8]
+# import by name
+G11: EQ BITAND lookupTable[3] 0x80 0 term
+G12: STRCMP HEADER lookupTable[0, 4] '\x00\x00printf\x00' term
+G13: EQ lookupTable[4, 4] 0 term
+G14: EQ lookupTable addressTable term
+
+P: otherDirs <- optHdr.DataDirectory[16, 126]
+G15: EQ otherDirs 0 term
+
+FROMFILE x86printfimport HEADER entryPoint 0 44
