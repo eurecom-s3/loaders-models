@@ -69,7 +69,7 @@ P: tmpNpages <- nPagesSections
 P: sectionTableOffset <- ADD HEADER.e_lfanew (ADD progHeader.SizeOfOptionalHeader 24)
 P: nSections <- progHeader.NumberOfSections
 # This avoids unconstrained sections
-G98: ULT nSections 5 term
+G98: ULE nSections 5 term
 L1: section <- LOOP(HEADER, sectionTableOffset, (sizeof _IMAGE_SECTION_HEADER), nSections, 5) AS _IMAGE_SECTION_HEADER
 
     # lines (469, 470), and (492, 494)
@@ -95,6 +95,9 @@ L1: section <- LOOP(HEADER, sectionTableOffset, (sizeof _IMAGE_SECTION_HEADER), 
 
     # line 525
     P(V20): rawDataEnd <- ADD section.SizeOfRawData section.PointerToRawData
+    # line 502 (avoid overflow)
+    V97(V20): UGT rawDataEnd section.SizeOfRawData term
+
     P(V20): alignedEnd <- ALIGNUP rawDataEnd optHdr.FileAlignment
     V27(V20): UGE alignedEnd section.PointerToRawData term
 
@@ -124,11 +127,13 @@ V36: AND AND AND UGE optHdr.MajorSubsystemVersion 3 (OR (NEq optHdr.MajorSubsyst
 ### this is an implicit condition introduced by io operations like linen 776-783
 P: zero <- INT 0 4
 P: endOfOptHdr <- ADD ADD (ADD zero progHeader.SizeOfOptionalHeader) 24 HEADER.e_lfanew
-P: endOfAllHdrs <- ADD endOfOptHdr MUL nSections 40
+P: sectTableSize <- MUL nSections 40
+P: endOfAllHdrs <- ADD endOfOptHdr sectTableSize
 V37: ULT (BITAND endOfOptHdr 0xFFFFF000) FILESIZE term
-V38: ULT endOfAllHdrs optHdr.SizeOfImage term
+### line 801 - not really understood why this is checked
+V38: ULE (ADD sectTableSize (BITAND endOfOptHdr 0xFFF)) FILESIZE term
 # This may not be accurate
-V39: ULT optHdr.SizeOfImage FILESIZE term
+#V39: ULT optHdr.SizeOfImage FILESIZE term
 
 # MmCreatePeb
 ## This function, among other things, dereferences some fields
@@ -142,6 +147,7 @@ V41: ULT (ADD loadConfigVA 0x40) optHdr.SizeOfImage term
 # BasepSxsCreateProcessCsrMessage
 ## Resource directory
 P: resDir <- optHdr.DataDirectory[16, 8] as _IMAGE_DATA_DIRECTORY
-V42: Eq resDir 0 term
+G42: Eq resDir 0 term
 
-# LdrpInitializeProcess
+### Checks that the header is not marked as DLL
+V43: Eq (BITAND progHeader.Characteristics 0x2000) 0 term
