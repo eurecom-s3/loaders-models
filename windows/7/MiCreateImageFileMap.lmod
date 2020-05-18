@@ -48,7 +48,7 @@ P: totalSizeHdrs <- ADD progHeader.SizeOfOptionalHeader ADD sectTableSize ADD ze
 V20: ULT totalSizeHdrs optHdr.SizeOfImage term
 
 ### MiCreateImageFileMap:370
-V98: ULT (ADD totalSizeHdrs HEADER.e_lfanew) FILESIZE term
+V98: ULE (ADD totalSizeHdrs HEADER.e_lfanew) FILESIZE term
 
 ## Start of MiBuildImageControlArea
 ### line 51
@@ -56,14 +56,18 @@ P: nPages <- SHR optHdr.SizeOfImage 12
 V21: NEq (BITAND optHdr.SizeOfImage 0xfff) 0
 P(V21): nPages <- Add nPages 1
 
+V25: UGE optHdr.SectionAlignment 0x1000
+
 ### line 139
-V22: NEq optHdr.SizeOfHeaders 0 term
+V22(V25): NEq optHdr.SizeOfHeaders 0 term
 ### line 142
-P: lastByteInHeaderSection <- ADD optHdr.SectionAlignment (SUB optHdr.SizeOfHeaders 1)
-V23: UGT lastByteInHeaderSection optHdr.SizeOfHeaders term
+P(V25): lastByteInHeaderSection <- ADD optHdr.SectionAlignment (SUB optHdr.SizeOfHeaders 1)
+### needs to be checked
+V23(V25): UGT lastByteInHeaderSection optHdr.SizeOfHeaders term
+
 ### line 145
 P: nPagesHdrs <- ADD (BITAND (SHR lastByteInHeaderSection 12) (SHR (BITNOT (SUB optHdr.SectionAlignment 1)) 12)) (SHR (ADD (BITAND (BITAND optHdr.SectionAlignment (BITNOT (SUB optHdr.SectionAlignment 1))) 0xfff) 0xfff) 12)
-V24: ULE nPagesHdrs nPages term
+V24(V25): ULE nPagesHdrs nPages term
 P: nPagesSections <- SUB nPages nPagesHdrs
 
 ## Start of MiParseImageSectionHeaders
@@ -71,7 +75,6 @@ P: nPagesSections <- SUB nPages nPagesHdrs
 P: sectionTableOffset <- ADD HEADER.e_lfanew (ADD progHeader.SizeOfOptionalHeader 24)
 P: nSections <- progHeader.NumberOfSections
 
-V25: UGE optHdr.SectionAlignment 0x1000
 
 G26(V25): NEq nSections 0 term
 P: tmpNpages <- nPagesSections
@@ -90,7 +93,7 @@ L1: section <- LOOP(HEADER, sectionTableOffset, 40, nSections, 5) AS _IMAGE_SECT
     V29: UGE (ADD section.PointerToRawData section.SizeOfRawData) section.SizeOfRawData term
 
     ### temp
-    V99: ULT sectionSize 0xf0000 term
+    G99: ULT sectionSize 0xf0000 term
 
     ### Line 87
     V30(V25): AND (Eq lastSectionEnd (ADD optHdr.ImageBase section.VirtualAddress)) (NEq sectionSize 0) term
@@ -114,7 +117,6 @@ L1: section <- LOOP(HEADER, sectionTableOffset, 40, nSections, 5) AS _IMAGE_SECT
     P(V25): endOfRawData <- ADD section.SizeOfRawData section.PointerToRawData
     ### avoid overflow when adding
     V34(V25): UGT (SUB 0xffffffff section.SizeOfRawData) section.PointerToRawData term
-
 
    ### line 227 - reach here only if sectionAlignment is < 0x1000
    V35(!V25): AND (EQ section.PointerToRawData section.VirtualAddress) (ULE sectionSize section.SizeOfRawData) term
