@@ -89,19 +89,20 @@ P: debugVA  <- debugDir.VirtualAddress
 P: debugSize <- debugDir.Size
 P: nDebugEntry <- DIV debugSize 28
 V12: NEq debugSize 0
-G13: ULE nDebugEntry 5 term
+V13(V12): ULT ADD debugVA 0x1c FILESIZE term
+G14: ULE nDebugEntry 5 term
 L3: debugEntry <- LOOP(HEADER, debugVA, 0x1c, nDebugEntry, 5) as _IMAGE_DEBUG_DIRECTORY
     P: dbgEntrySize <- debugEntry.SizeOfData
     P: dbgPtrData <- debugEntry.PointerToRawData
-    V14: ULT (ADD dbgEntrySize dbgPtrData) FILESIZE term
+    V15: ULT (ADD dbgEntrySize dbgPtrData) FILESIZE term
 END L3
 
 #### LdrpCheckForSecuROMImage also checks that the certificate entry lies within the file. We do not support it for generation (it would need to create a valida certificate (which is impossible ofc)
 P: certDir <- optHdr.DataDirectory[32, 8] as _IMAGE_DATA_DIRECTORY
 P: certDirVA <- certDir.VirtualAddress
 P: certDirSize <- certDir.Size
-G15: EQ certDir 0 term
-V16: ULT (ADD certDirSize certDirVA) FILESIZE term
+G16: EQ certDir 0 term
+V17: ULT (ADD certDirSize certDirVA) FILESIZE term
 
 
 ### LdrpSetProtection: invoked before relocating to set the pages RWX
@@ -115,7 +116,7 @@ L4(V4): section <- LOOP(HEADER, sectTableOff, 40, nSections, 5) AS _IMAGE_SECTIO
     P: virtSize <- section.VirtualSize
     P: sizeRawData <- section.SizeOfRawData
     P: VA <- section.VirtualAddress
-    V17: EQ (BITAND charact 0x80000000) 0
-    V18(V17): ULT VA FILESIZE term
-    V19(V17): ULT (ADD VA sizeRawData) FILESIZE term
+    V18: EQ (BITAND charact 0x80000000) 0
+    V19(V18): ULT VA FILESIZE term
+    V20(V18): ULT (ADD VA sizeRawData) FILESIZE term
 END L4
