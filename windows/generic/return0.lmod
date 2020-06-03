@@ -4,8 +4,39 @@ DEFINE FILESIZE 500
 INPUT HEADER FILESIZE as DOSHeader
 
 P: NT_HEADER <- HEADER[HEADER.e_lfanew, sizeof _IMAGE_NT_HEADERS] as _IMAGE_NT_HEADERS
+P: progHdr <- NT_HEADER.FileHeader as _IMAGE_FILE_HEADER
 P: optHdr <- NT_HEADER.OptionalHeader as _IMAGE_OPTIONAL_HEADER
 
-P: entryPoint <- optHdr.AddressOfEntryPoint
+V1: UGE optHdr.SectionAlignment 0x1000
+G1: ULT optHdr.ImageBase 0x40000000 term
+P: entryPointOff <- INT 0 4
+P: entryPointRVA <- optHdr.AddressOfEntryPoint
+P(!V1): entryPointOff <- entryPointRVA
 
-FROMFILE x86ret0 HEADER entryPoint 0 3
+P: sectTabOff <- ADD HEADER.e_lfanew (ADD progHdr.SizeOfOptionalHeader 24)
+P: nSect <- progHdr.NumberOfSections
+P: entrySection <- INT 0 (sizeof _IMAGE_SECTION_HEADER) as _IMAGE_SECTION_HEADER
+L1(V1): section <- LOOP(HEADER, sectTabOff, 40, nSect, 5) AS _IMAGE_SECTION_HEADER
+    P: RVA <- section.VirtualAddress
+    P: sizeRawData <- section.SizeOfRawData
+    P: VirtSize <- section.VirtualSize
+    P: size <- VirtSize
+    P: sectOff <- section.PointerToRawData
+
+    V2: EQ VirtSize 0
+    P(V2): size <- sizeRawData
+    P: sectEnd <- ADD RVA size
+
+    V3: AND (ULE RVA entryPointRVA) (UGT sectEnd entryPointRVA)
+    P(V3): entryPointOff <- ADD sectOff (SUB entryPointRVA RVA)
+    G4(V3): EQ section.Characteristics[3] 0x70 term
+    G5(V3): AND NEq sectOff 0 UGT sizeRawData 3 term
+END L1
+
+G6: NEQ entryPointOff 0 term
+G7: EQ optHdr.SectionAlignment 0x1000 term
+
+#### temp
+G99: EQ optHdr.DataDirectory 0 term
+
+FROMFILE x86ret0 HEADER entryPointOff 0 3
