@@ -82,8 +82,9 @@ P: lastSectionEnd <- ADD optHdr.ImageBase MUL nPagesHdrs 4096
 
 L1: section <- LOOP(HEADER, sectionTableOffset, 40, nSections, 5) AS _IMAGE_SECTION_HEADER
 
+    P: sectChar <- section.Characteristics
     ### Line 62
-    V27(V25): AND (NEq BITAND section.Characteristics 0x10000000 0) (OR (EQ (BITAND section.Characteristics 0x20000000) 0) (LT section.Characteristics 0))
+#    V27(V25): AND (Eq BITAND sectChar[3] 0x10 0x10) (OR (EQ (BITAND sectChar[3] 0x20) 0) (LT sectChar 0)) term
     P: sectionSize <- section.VirtualSize
 
 
@@ -110,13 +111,17 @@ L1: section <- LOOP(HEADER, sectionTableOffset, 40, nSections, 5) AS _IMAGE_SECT
     ### line 118
     P(V25): alignedEnd <- ALIGNUP (ADD section.SizeOfRawData section.PointerToRawData) optHdr.FileAlignment
     V33(V25): UGE alignedEnd section.PointerToRawData term
+    V101(V25): EQ BITAND section.PointerToRawData (SUB optHdr.FileAlignment 1) 0 term
+    V102(V25): EQ BITAND section.SizeOfRawData (SUB optHdr.FileAlignment 1) 0 term
+    V103(V25): ULT section.PointerToRawData FILESIZE term
+    V104(V25): ULE ADD section.PointerToRawData section.SizeOfRawData FILESIZE term
 
     ### line 193
     P(V25): lastSectionEnd <- ADD lastSectionEnd MUL nPtes 4096
 
     P(V25): endOfRawData <- ADD section.SizeOfRawData section.PointerToRawData
     ### avoid overflow when adding
-    V34(V25): UGT (SUB 0xffffffff section.SizeOfRawData) section.PointerToRawData term
+    V34(V25): NOT OVFLADD section.SizeOfRawData section.PointerToRawData term
 
    ### line 227 - reach here only if sectionAlignment is < 0x1000
    V35(!V25): AND (EQ section.PointerToRawData section.VirtualAddress) (ULE sectionSize section.SizeOfRawData) term
@@ -157,10 +162,14 @@ V44: Eq BITAND loadConfigVA 3 0 term
 P: loadConfig <- HEADER[loadConfigVA, 0x40] as _IMAGE_LOAD_CONFIG_DIRECTORY
 V45: ULT (ADD loadConfigVA 0x40) optHdr.SizeOfImage term
 
+# Makes sure that all the headers are copied in memory
+V46: EQ optHdr.SizeOfHeaders (ADD sectionTableOffset sectTableSize) term
+
+
 # PspAllocateProcess:245
 ### Checks that the header is not marked as DLL
-V46: Eq (BITAND progHeader.Characteristics 0x2000) 0 term
+V47: Eq (BITAND progHeader.Characteristics 0x2000) 0 term
 
 # SeValidateImageHeader
 ### Check hash if FORCE_INTEGRITY bit is set
-G47: EQ (BITAND optHdr.DllCharacteristics 0x80) 0 term
+G48: EQ (BITAND optHdr.DllCharacteristics 0x80) 0 term
