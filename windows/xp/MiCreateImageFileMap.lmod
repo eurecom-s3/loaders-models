@@ -96,7 +96,7 @@ L1: section <- LOOP(HEADER, sectionTableOffset, (sizeof _IMAGE_SECTION_HEADER), 
     # line 525
     P(V20): rawDataEnd <- ADD section.SizeOfRawData section.PointerToRawData
     # line 502 (avoid overflow)
-    V97(V20): UGT rawDataEnd section.SizeOfRawData term
+     V97(V20): NOT OVFLADD section.SizeOfRawData section.PointerToRawData term
 
     P(V20): alignedEnd <- ALIGNUP rawDataEnd optHdr.FileAlignment
     V27(V20): UGE alignedEnd section.PointerToRawData term
