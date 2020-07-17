@@ -13,8 +13,7 @@ V3: EQ NT_HEADER.Signature 0x4550  term
 
 #### Start of MiVerifyImageHeader
 P: progHeader <- NT_HEADER.FileHeader as _IMAGE_FILE_HEADER
-V4: NEq progHeader.Machine 0 term
-V5: NEq progHeader.SizeOfOptionalHeader 0 term
+V4: OR (NEq progHeader.Machine 0) (NEq progHeader.SizeOfOptionalHeader 0) term
 
 V6: NEq (BITAND progHeader.Characteristics 2) 0 term
 V7: Eq (BITAND HEADER.e_lfanew 3) 0 term
@@ -23,6 +22,7 @@ P: optHdr <- NT_HEADER.OptionalHeader as _IMAGE_OPTIONAL_HEADER
 V8: Eq optHdr.Magic 0x10b term
 
 V9: OR (EQ (BITAND optHdr.FileAlignment 0x1ff) 0) (EQ optHdr.SectionAlignment optHdr.FileAlignment) term
+P: asd <- optHdr.FileAlignment
 V10: NEq optHdr.FileAlignment 0 term
 V11: ISPOW2 optHdr.SectionAlignment term
 V12: ISPOW2 optHdr.FileAlignment term
@@ -132,9 +132,8 @@ P: endOfAllHdrs <- ADD endOfOptHdr sectTableSize
 V37: ULT (BITAND endOfOptHdr 0xFFFFF000) FILESIZE term
 ### line 801 - not really understood why this is checked
 V38: ULE (ADD sectTableSize (BITAND endOfOptHdr 0xFFF)) FILESIZE term
-# This may not be accurate
-#V39: ULT optHdr.SizeOfImage FILESIZE term
 
+################ !!!!!!!!!!!!!!!!!!!!!!!!!! check this ones!!!!!!!!!!!
 # MmCreatePeb
 ## This function, among other things, dereferences some fields
 ## in the LOAD_CONFIG directory

@@ -19,9 +19,9 @@ P: tlsDir <- optHdr.DataDirectory[72, 8] as _IMAGE_DATA_DIRECTORY
 P: tlsDirEnd <- ADD tlsDir.VirtualAddress tlsDir.Size
 
 ### TLS is not mandatory
-V2: AND (UGT optHdr.NumberOfRvaAndSizes 9) (NEq tlsDir.VirtualAddress 0)
+#V2: AND (UGT optHdr.NumberOfRvaAndSizes 9) (NEq tlsDir.VirtualAddress 0)
 ### Condition for a valid TLS table
-V3(V2): AND (UGT tlsDirEnd tlsDir.VirtualAddress) ULE tlsDirEnd imageEnd term
+#V3(V2): AND (UGT tlsDirEnd tlsDir.VirtualAddress) ULE tlsDirEnd imageEnd term
 ### Avoid to generate TLS directory
 G1: OR (ULE optHdr.NumberOfRvaAndSizes 9) (Eq tlsDir 0) term
 
@@ -79,8 +79,11 @@ END L1
 
 ### LdrpCheckForSafeDiscImage
 #### Implicit constraints due to dereferencing fields in the headers
-V10: GT SUB optHdr.SizeOfHeaders 0x2c 0 term
+V10: UGT SUB optHdr.SizeOfHeaders 0x2c 0 term
 V11: ULT ADD optHdr.SizeOfHeaders 0x13 FILESIZE term
+### This is the trickiest one. The header content is copied up to SizeOfHeader bytes.
+### The SizeOfHeader field needs to be among the bytes of the header that are copied, otherwise its default value (0x0) will be used for pointer arithmetic, leading to invalid memory accesses
+V111: UGE optHdr.SizeOfHeaders ADD HEADER.e_lfanew 0x58 term
 
 ### LdrpCheckForSecuROMImage
 #### Other implicit constraints, like the one above
