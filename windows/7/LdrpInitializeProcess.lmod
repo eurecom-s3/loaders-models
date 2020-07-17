@@ -39,19 +39,21 @@ P: tlsDirEnd <- ADD tlsDir.VirtualAddress tlsDir.Size
 V6: AND (UGT optHdr.NumberOfRvaAndSizes 9) (NEq tlsDir.VirtualAddress 0)
 V7(V6): UGT (SUB 0xffffffff tlsDir.VirtualAddress) tlsDir.Size term
 V8(V6): ULE tlsDirEnd imageEnd term
+G21: OR (ULE optHdr.NumberOfRvaAndSizes 9) (Eq tlsDir 0) term
 
 
 ### Relocations
 #### They come into play only if the image needs to be relocated.
 #### This means that the ImageBase is either 0 or in the range of other DLLs
-V9: OR (Eq optHdr.ImageBase 0) (UGE optHdr.ImageBase 0x70000000)
+V9: OR (Eq optHdr.ImageBase 0) (UGE optHdr.ImageBase 0x80000000)
 
 P: relocDir <- optHdr.DataDirectory[40, 8] as _IMAGE_DATA_DIRECTORY
 P: relocVA <- relocDir.VirtualAddress
 P: relocSize <- relocDir.Size
+G7: ULT relocSize 0x100 term
 
 #### LdrRelocateImageWithBias:32
-V10(V9): AND (AND NEq relocVA 0 NEq relocSize 0) ULT relocVA imageEnd
+V10(V9): AND (UGE optHdr.NumberOfRvaAndSizes 5) (AND NEq relocVA 0 NEq relocSize 0)
 
 ### If the image is relocated, but doesn't have the reloc table, check that it wasn't stripped away, in which case the image is invalid
 #### LdrRelocateImageWithBias:55
@@ -59,10 +61,11 @@ V11(V9, !V10): Eq BITAND fileHdr.Characteristics 0x1 0 term
 
 P: tmpSize <- relocSize
 P(V10): loopStart <- relocVA
-L1(V10): relocBlockAddr <- VLOOP(loopStart, nextBlockAddr, V99, 5)
+L2(V10): relocBlockAddr <- VLOOP(loopStart, nextBlockAddr, V99, 1)
     P: relocBlock <- HEADER[relocBlockAddr, 8]
     P: blockSize <- relocBlock[4, 3]
     P: blockPage <- relocBlock[0, 3]
+    G6: ULT blockPage 2 term
     P: firstEntryAddr <- ADD relocBlockAddr 8
     P: nEntry <- SHR (SUB blockSize 8) 2
     P: tmpSize <- SUB tmpSize blockSize
@@ -70,7 +73,7 @@ L1(V10): relocBlockAddr <- VLOOP(loopStart, nextBlockAddr, V99, 5)
     V99: UGT tmpSize 0
 
     P: tmpEntry <- INT 0 4
-    L2: entryAddr <- VLOOP(firstEntryAddr, nextBAddr, V98, 5)
+    L3: entryAddr <- VLOOP(firstEntryAddr, nextBAddr, V98, 1)
         P: entry <- HEADER[entryAddr, 2]
         P: tmpEntry <- ADD tmpEntry 1
         P: nextBAddr <- ADD entryAddr 2
@@ -80,6 +83,7 @@ L1(V10): relocBlockAddr <- VLOOP(loopStart, nextBlockAddr, V99, 5)
 
         V12: AND ULE relocType 10 NEq relocType 8 term
         V13: ULT ADD blockPage relocAddr imageEnd term
+	G13: ULT ADD blockPage relocAddr FILESIZE term
 
         ## RelocType 4 uses two entries instead of 1
         V14: Eq relocType 4
@@ -87,12 +91,13 @@ L1(V10): relocBlockAddr <- VLOOP(loopStart, nextBlockAddr, V99, 5)
         P(V14): nextBAddr <- ADD nextBAddr 2
 
         V98: ULE tmpEntry nEntry
-    END L2
-END L1
+    END L3
+END L2
+G4: EQ tmpSize 0 term
 
 ### LdrpCheckForSafeDiscImage
 #### Implicit constraints due to dereferencing fields in the headers
-V15: GT SUB optHdr.SizeOfHeaders 0x2c 0 term
+V15: UGT SUB optHdr.SizeOfHeaders 0x2c 0 term
 V16: ULT ADD optHdr.SizeOfHeaders 0x13 FILESIZE term
 
 ### LdrpCheckForSecuROMImage
@@ -103,11 +108,11 @@ P: debugSize <- debugDir.Size
 P: nDebugEntry <- DIV debugSize 28
 V17: NEq debugSize 0
 G18: ULE nDebugEntry 5 term
-L3: debugEntry <- LOOP(HEADER, debugVA, 0x1c, nDebugEntry, 5) as _IMAGE_DEBUG_DIRECTORY
+L4: debugEntry <- LOOP(HEADER, debugVA, 0x1c, nDebugEntry, 5) as _IMAGE_DEBUG_DIRECTORY
     P: dbgEntrySize <- debugEntry.SizeOfData
     P: dbgPtrData <- debugEntry.PointerToRawData
     V19: ULT (ADD dbgEntrySize dbgPtrData) FILESIZE term
-END L3
+END L4
 
 #### LdrpCheckForSecuROMImage also checks that the certificate entry lies within the file. We do not support it for generation (it would need to create a valida certificate (which is impossible ofc)
 P: certDir <- optHdr.DataDirectory[32, 8] as _IMAGE_DATA_DIRECTORY

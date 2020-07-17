@@ -16,8 +16,7 @@ V3: EQ NT_HEADER.Signature 0x4550  term
 
 #### Start of MiVerifyImageHeader
 P: progHeader <- NT_HEADER.FileHeader as _IMAGE_FILE_HEADER
-V4: NEq progHeader.Machine 0 term
-V5: NEq progHeader.SizeOfOptionalHeader 0 term
+V4: OR (NEq progHeader.Machine 0) (NEq progHeader.SizeOfOptionalHeader 0) term
 
 V6: NEq (BITAND progHeader.Characteristics 2) 0 term
 V7: Eq (BITAND HEADER.e_lfanew 3) 0 term
@@ -31,7 +30,6 @@ V11: ISPOW2 optHdr.SectionAlignment term
 V12: ISPOW2 optHdr.FileAlignment term
 V13: UGE optHdr.SectionAlignment optHdr.FileAlignment term
 V14: ULE optHdr.SizeOfImage 0x77000000 term
-V15: ULE progHeader.NumberOfSections 0x60 term
 V16: Eq progHeader.Machine 0x14c term
 #### End of MiVerifyImageHeader
 
@@ -57,6 +55,7 @@ V21: NEq (BITAND optHdr.SizeOfImage 0xfff) 0
 P(V21): nPages <- Add nPages 1
 
 V25: UGE optHdr.SectionAlignment 0x1000
+G56: ULE optHdr.SectionAlignment 0x20000 term
 
 ### line 139
 V22(V25): NEq optHdr.SizeOfHeaders 0 term
@@ -109,12 +108,14 @@ L1: section <- LOOP(HEADER, sectionTableOffset, 40, nSections, 5) AS _IMAGE_SECT
     P(V25): tmpNpages <- SUB tmpNpages nPtes
 
     ### line 118
-    P(V25): alignedEnd <- ALIGNUP (ADD section.SizeOfRawData section.PointerToRawData) optHdr.FileAlignment
+    P(V25): alignedEnd <- ADD section.PointerToRawData (ALIGNUP section.SizeOfRawData  optHdr.FileAlignment)
     V33(V25): UGE alignedEnd section.PointerToRawData term
-    V101(V25): EQ BITAND section.PointerToRawData (SUB optHdr.FileAlignment 1) 0 term
-    V102(V25): EQ BITAND section.SizeOfRawData (SUB optHdr.FileAlignment 1) 0 term
+
+    ### Check these
+#    V101(V25): EQ BITAND section.PointerToRawData (SUB optHdr.FileAlignment 1) 0 term
+#    V102(V25): EQ BITAND section.SizeOfRawData (SUB optHdr.FileAlignment 1) 0 term
     V103(V25): ULT section.PointerToRawData FILESIZE term
-    V104(V25): ULE ADD section.PointerToRawData section.SizeOfRawData FILESIZE term
+    V104(V28): ULE ADD section.PointerToRawData section.SizeOfRawData FILESIZE term
 
     ### line 193
     P(V25): lastSectionEnd <- ADD lastSectionEnd MUL nPtes 4096
@@ -163,7 +164,9 @@ P: loadConfig <- HEADER[loadConfigVA, 0x40] as _IMAGE_LOAD_CONFIG_DIRECTORY
 V45: ULT (ADD loadConfigVA 0x40) optHdr.SizeOfImage term
 
 # Makes sure that all the headers are copied in memory
-V46: EQ optHdr.SizeOfHeaders (ADD sectionTableOffset sectTableSize) term
+### this may not be correct
+V46: UGE optHdr.SizeOfHeaders (ADD HEADER.e_lfanew 0x5d) term
+#V46: EQ optHdr.SizeOfHeaders (ADD sectionTableOffset sectTableSize) term
 
 
 # PspAllocateProcess:245
