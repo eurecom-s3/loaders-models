@@ -76,7 +76,8 @@ V16: UGE optHdr.SectionAlignment optHdr.FileAlignment term
 V17: ULE optHdr.SizeOfImage 0x77000000 term
 
 # line 139
-V18: OR (EQ progHdr.Machine 0x14c) (EQ progHdr.Machine 0x1c4) term
+#V18: OR (EQ progHdr.Machine 0x14c) (EQ progHdr.Machine 0x1c4) term
+V18: EQ progHdr.Machine 0x14c term
 
 # line 144
 V19: ULT optHdr.SizeOfHeaders optHdr.SizeOfImage term
@@ -93,7 +94,7 @@ V22(V21): NEq BITAND progHdr.Machine 1 1 term
 # line 161
 V23(V21): EQ BITAND optHdr.DllCharacteristics 0x140 0x140 term
 
-V24(!V21): AND (EQ BITAND progHdr.Machine 1 0) (EQ BITAND optHdr.DllCharacteristics 0x1000 1) term
+V24(!V21): AND (NEQ BITAND progHdr.Machine 1 1) (EQ BITAND optHdr.DllCharacteristics 0x140 0x140) term
 ######### End of MiVerifyImageHeader
 
 # line 290
@@ -130,6 +131,14 @@ V32: ULT optHdr.SectionAlignment 0x1000
 # line 366... only x86 and x86_64 supported for sectionalign < 0x1000
 V33(V32): OR (EQ progHdr.Machine 0x14C) (EQ progHdr.Machine 0x8664) term
 
+
+## check total size of headers
+P: sectTableSize <- MUL progHdr.NumberOfSections 40
+P: totalSizeHdrs <- ADD progHdr.SizeOfOptionalHeader ADD sectTableSize ADD zero 0x18
+V57: ULT totalSizeHdrs optHdr.SizeOfImage term
+V58: ULE (ADD totalSizeHdrs dosHdr.e_lfanew) FILESIZE term
+
+
 #### MiBuildImageControlArea
 # line 45
 P: nPagesImage <- SHR optHdr.SizeOfImage 12
@@ -141,8 +150,8 @@ P: stuff <- ADD optHdr.SizeOfHeaders SUB optHdr.SectionAlignment 1
 P: nPagesHeaders <- ADD (SHR (ADD (BITAND (BITAND stuff (BITNOT SUB optHdr.SectionAlignment 1)) 0xFFF) 0xFFF) 12) (BITAND (SHR (BITNOT SUB optHdr.SectionAlignment 1) 12) (SHR stuff 12))
 
 # line 174
-V36(V32): UGT stuff optHdr.SizeOfHeaders term
-V37(V32): ULE nPagesHeaders nPagesImage term
+V36(!V32): AND (NEQ optHdr.SizeOfHeaders 0) (UGT stuff optHdr.SizeOfHeaders) term
+V37(!V32): ULE nPagesHeaders nPagesImage term
 
 #### MiParseImageSectionHeaders
 P: offSectTable <- ADD sizeNtHdr dosHdr.e_lfanew
@@ -167,7 +176,7 @@ L1: section <- LOOP(HEADER, offSectTable, 40, nSect, 5) AS _IMAGE_SECTION_HEADER
 
   # line 80
   V39(V32): NOT OVFLADD section.SizeOfRawData section.PointerToRawData term
-  V40(V32): AND (EQ section.PointerToRawData section.VirtualAddress) (ULE sectSize section.SizeOfRawData)
+  V40(V32): AND (EQ section.PointerToRawData section.VirtualAddress) (ULE sectSize section.SizeOfRawData) term
 
   # line 131
   P: parsedPtrRawData <- section.PointerToRawData
@@ -201,3 +210,36 @@ V48(!V32): ULT remainingPages (SHR optHdr.SectionAlignment 12) term
 
 # line 110 (reached the second time after the loop, coming from line 282)
 V49(!V32): ULE endRawData FILESIZE term
+
+#### PspAllocateProcess
+G6: OR (EQ optHdr.DataDirectory[16, 8] 0) (ULE optHdr.NumberOfRvaAndSizes 3) term
+
+#### CreateProcessInternal:1429
+V50: OR EQ optHdr.Subsystem 2 EQ optHdr.Subsystem 3 term
+
+#### BasepCheckImageVersion
+P: majorSub <- optHdr.MajorSubsystemVersion
+P: minorSub <- optHdr.MinorSubsystemVersion
+P: majminSub <- optHdr[48, 4]
+P: maxSub <- INT 0x0a00 4
+V51: AND (EQ majorSub 3) (OR (NEQ majorSub 3) (UGE minorSub 0xa)) term
+V52: OR (ULT majorSub 0xa) (AND (EQ majorSub 0xa) (EQ minorSub 0)) term
+
+# MmCreatePeb
+## This function, among other things, dereferences some fields
+## in the LOAD_CONFIG directory
+P: loadConfigDir <- optHdr.DataDirectory[80, 8] as _IMAGE_DATA_DIRECTORY
+P: loadConfigVA <- loadConfigDir.VirtualAddress
+V53: Eq BITAND loadConfigVA 3 0 term
+P: loadConfig <- HEADER[loadConfigVA, 0x40] as _IMAGE_LOAD_CONFIG_DIRECTORY
+V54: ULT (ADD loadConfigVA 0x40) optHdr.SizeOfImage term
+
+# Make sure that the headers are copied in memory after mapping
+V55: UGE optHdr.SizeOfHeaders (ADD dosHdr.e_lfanew 0x5d) term
+
+#### MiRelocateImage: checks that the relocation directory lies within the file
+P: relocDir <- optHdr.DataDirectory[40, 8] as _IMAGE_DATA_DIRECTORY
+P: relocVA <- relocDir.VirtualAddress
+P: relocSize <- relocDir.Size
+V56: UGE optHdr.NumberOfRvaAndSizes 5
+G5(V56): AND (ULE relocSize FILESIZE) (ULT ADD relocVA relocSize FILESIZE) term
