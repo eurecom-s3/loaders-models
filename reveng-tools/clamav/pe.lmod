@@ -1,0 +1,137 @@
+LOADREL clamav
+
+DEFINE FILESIZE 500
+INPUT HEADER FILESIZE as DOSHeader
+
+P: dosHdr <- HEADER[0, sizeof DOSHeader] as DOSHeader
+
+G1: EQ dosHdr.magic 0x5a4d term
+V1: OR (EQ dosHdr.magic 0x5a4d) (EQ dosHdr.magic 0x4d5a) term
+V2: UGE (INT FILESIZE 4) 0x40 term
+V3: NEQ dosHdr.e_lfanew 0 term
+V4: ULT (ADD dosHdr.e_lfanew sizeof pe_image_file_hdr) FILESIZE term
+
+P: fileHdr <- HEADER[dosHdr.e_lfanew, sizeof pe_image_file_hdr] as pe_image_file_hdr
+
+V5: EQ fileHdr.Magic 0x4550 term
+V6: OR (NEQ (BITAND fileHdr.Characteristics 2) 0) (NEQ (BITAND fileHdr.Characteristics 0x2000) 0) term
+
+P: nSect <- fileHdr.NumberOfSections
+
+V7: AND (NEq nSect 0) (ULE nSect 96) term
+
+P: optSize <- fileHdr.SizeOfOptionalHeader
+V8: UGE fileHdr.SizeOfOptionalHeader sizeof pe_image_optional_hdr32 term
+
+P: optOffset <- ADD dosHdr.e_lfanew sizeof pe_image_file_hdr
+V9: ULE (ADD optOffset sizeof pe_image_optional_hdr32) FILESIZE term
+
+P: optHdr <- HEADER[optOffset, sizeof pe_image_optional_hdr32] as pe_image_optional_hdr32
+
+V10: EQ optHdr.Magic 0x20b
+V11(V10): UGE optSize sizeof pe_image_optional_hdr64 term
+
+### read remaining bytes of the OPT64 hdr
+V12(V10): ULE (ADD optOffset sizeof pe_image_optional_hdr32) FILESIZE term
+
+P(V10): optHdr64 <- HEADER[optOffset, sizeof pe_image_optional_hdr64] as pe_image_optional_hdr32
+P(V10): vep <- optHdr64.AddressOfEntryPoint
+P(V10): hdrSize <- optHdr64.SizeOfHeaders
+P(V10): nDirs <- optHdr64.NumberOfRvaAndSizes
+
+
+P(!V10): vep <- optHdr.AddressOfEntryPoint
+P(!V10): hdrSize <- optHdr.SizeOfHeaders
+P(!V10): nDirs <- optHdr.NumberOfRvaAndSizes
+
+
+P: salign <- optHdr.SectionAlignment
+P(V10): salign <-optHdr64.SectionAlignment
+P: falign <- optHdr.FileAlignment
+P(V10): falign <-optHdr64.FileAlignment  
+
+P: subsystem <- optHdr.Subsystem
+P(V10): subsystem <- optHdr64.Subsystem
+
+#### Avoid native subsystem for now
+G99: NEQ subsystem 1 term
+V13: OR (EQ subsystem 1) (OR (NEQ salign 0) (ISALIGNED salign 0x1000)) term
+V14: OR (EQ subsystem 1) (OR (NEQ falign 0) (ISALIGNED falign 0x200)) term
+
+### consider only the first 16 directories, even if nDirs is greater than the number 16 (common directory number)
+V15: UGT nDirs 16
+P(V15): nDirs <- INT 16 4
+P: dirSize <- MUL nDirs sizeof pe_image_data_dir
+
+V16(V10): UGE optSize (ADD dirSize sizeof pe_image_optional_hdr64) term
+V17(!V10): UGE optSize (ADD dirSize sizeof pe_image_optional_hdr32) term
+
+P(V10): dirsOffset <- ADD optOffset sizeof pe_image_optional_hdr64
+P(!V10): dirsOffset <- ADD optOffset sizeof pe_image_optional_hdr32
+
+V18: ULT ADD dirsOffset dirSize FILESIZE term
+
+P: sectTableOff <- ADD dirsOffset dirSize
+V19(V10): UGT fileHdr.SizeOfOptionalHeader (ADD dirSize sizeof pe_image_optional_hdr64)
+P(V19): sectTableOff <- ADD optOffset fileHdr.SizeOfOptionalHeader
+
+V20(!V10): UGT fileHdr.SizeOfOptionalHeader (ADD dirSize sizeof pe_image_optional_hdr32)
+P(V20): sectTableOff <- ADD optOffset fileHdr.SizeOfOptionalHeader
+P: hdrSize <- ALIGNUP hdrSize salign
+V21: ULE (ADD (MUL nSect sizeof pe_image_section_hdr) sectTableOff) FILESIZE term
+V22: NEq falign 0x200
+
+L1(V22): section <- LOOP(HEADER, sectTableOff, 40, nSect, 5) as pe_image_section_hdr
+    V23: AND (AND (NEq falign 0) (NEq section.SizeOfRawData 0)) (AND (ISALIGNED section.PointerToRawData falign) (NOT ISALIGNED section.PointerToRawData 0x200))
+    P(V23): falign <- INT 0x200 4
+END L1
+
+V24: NEQ salign 0 term
+V25: NEQ falign 0
+P: expected_rva <- hdrSize
+P: ep_found <- INT 0 1
+L2: section2 <- LOOP(HEADER, sectTableOff, sizeof pe_image_section_hdr, nSect, 5) as pe_image_section_hdr
+    P: rva <- ALIGNDOWN section.VirtualAddress salign
+    P: vsz <- ALIGNUP section.VirtualSize salign
+
+    P: raw <- section.PointerToRawData
+    P(V25): raw <- ALIGNDOWN section.PointerToRawData falign
+
+    P: rsz <- section.SizeOfRawData
+    P(V25): rsz <- ALIGNUP section.SizeOfRawData falign
+
+    P: urva <- section.VirtualAddress
+    P: uvsz <- section.VirtualSize
+    P: uraw <- section.PointerToRawData
+    P: uraw <- section.SizeOfRawData
+
+    V26: NEQ rsz 0
+    V27(V26): OR (UGE raw FILESIZE) (UGE uraw FILESIZE)
+
+    P(V27): rsz <- INT 0 4
+    P(V27): ursz <- INT 0 4
+    V28(V26, !V27): ULE (ADD rsz raw) FILESIZE
+    P(V28): rsz <- SUB (INT FILESIZE 4) raw
+    V29(V26, !V27): ULE (ADD ursz uraw) FILESIZE
+    P(V29): ursz <- SUB (INT FILESIZE 4) uraw
+
+    # these are redundant
+    # V30: AND (EQ vsz 0) (NEQ rsz 0)
+    # P(V30) vsz <- ALIGNUP ursz salign
+
+    V31: ISALIGNED urva salign term
+    V32: (EQ BITAND urva[3] 0x80 0) term
+    V33: (EQ BITAND uvsz[3] 0x80 0) term
+    V34: OR (EQ rsz 0) (EQ BITAND uvsz[3] 0x80 0) term
+    V35: (EQ BITAND ursz[3] 0x80 0) term
+
+    ##### the following if-else can be modeled easily introducing the hidden variable expected_rva, which is set to hdrSize before the loop and updated to the end of the current section at the end of the iteration
+    V36: EQ urva expected_rva term
+    P: expected_rva <- ADD urva vsz
+END L2
+
+
+#### Check whether the current section contains the EntryPoint. This check is a few lines below
+V37: AND (AND (UGE optHdr.AddressOfEntryPoint rva) (UGT rsz (SUB optHdr.AddressOfEntryPoint rva))) (NEQ rsz 0)
+P(V37): ep_found <- INT 1 1
+V38: NEQ ep_found 0 term

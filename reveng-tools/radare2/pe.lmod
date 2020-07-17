@@ -1,0 +1,27 @@
+#### libr/bin/format/pe/pe.c
+
+LOADREL ntkrnlmp
+
+DEFINE FILESIZE 500
+
+INPUT HEADER FILESIZE
+
+P: dosHdr <- HEADER as DOSHeader
+P: e_lfanew <- dosHdr.e_lfanew
+
+# line 534
+V1: UGT e_lfanew FILESIZE term
+
+# line 602
+V2: EQ dosHdr.e_magic 0x5a4d term
+
+P: ntHdr <- HEADER[e_lfanew, sizeof _IMAGE_NT_HEADERS] as _IMAGE_NT_HEADERS
+#line 603-605
+V3: OR (EQ ntHdr.Signature[0, 2] 0x4550) (EQ ntHdr.Signature[0, 2] 0x4x50) term
+
+
+P: fileHdr <- ntHdr.FileHeader as _IMAGE_FILE_HEADER
+P: nSect <- fileHdr.NumberOfSections
+P: sectionTableSize <- MUL fileHdr.NumberOfSections 40
+V4: UGT sectionTableSize FILESIZE
+P: nSect <- DIV (INT FILESIZE 4) 40
