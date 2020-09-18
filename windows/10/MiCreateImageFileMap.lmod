@@ -31,7 +31,7 @@ V2: AND EQ dosHdr.magic[0] "M" EQ dosHdr.magic[1] "Z" term
 V3: NOT OVFLADD dosHdr.e_lfanew 0xf8 term
 
 # line 224
-V4: ULT ADD dosHdr.e_lfanew 0xf8 FILESIZE term
+V4: ULE ADD dosHdr.e_lfanew 0xf8 FILESIZE term
 
 # line 231
 V5: UGT (ADD dosHdr.e_lfanew 0xf8) (SHL fileSizePages 12)
@@ -94,7 +94,7 @@ V22(V21): NEq BITAND progHdr.Machine 1 1 term
 # line 161
 V23(V21): EQ BITAND optHdr.DllCharacteristics 0x140 0x140 term
 
-V24(!V21): AND (NEQ BITAND progHdr.Machine 1 1) (EQ BITAND optHdr.DllCharacteristics 0x140 0x140) term
+#V24(!V21): EQ BITAND optHdr.DllCharacteristics 0x1000 0x1000 term
 ######### End of MiVerifyImageHeader
 
 # line 290
@@ -180,7 +180,7 @@ L1: section <- LOOP(HEADER, offSectTable, 40, nSect, 5) AS _IMAGE_SECTION_HEADER
 
   # line 131
   P: parsedPtrRawData <- section.PointerToRawData
-  V41(!V32): EQ section.SizeOfRawData 0 term
+  V41(!V32): EQ section.SizeOfRawData 0
   P(V41): parsedPtrRawData <- INT 0 4
 
   # line 140
@@ -222,7 +222,7 @@ P: majorSub <- optHdr.MajorSubsystemVersion
 P: minorSub <- optHdr.MinorSubsystemVersion
 P: majminSub <- optHdr[48, 4]
 P: maxSub <- INT 0x0a00 4
-V51: AND (EQ majorSub 3) (OR (NEQ majorSub 3) (UGE minorSub 0xa)) term
+V51: OR (UGT majorSub 3) (AND (EQ majorSub 3) (UGE minorSub 0xa)) term
 V52: OR (ULT majorSub 0xa) (AND (EQ majorSub 0xa) (EQ minorSub 0)) term
 
 # MmCreatePeb
@@ -235,7 +235,7 @@ P: loadConfig <- HEADER[loadConfigVA, 0x40] as _IMAGE_LOAD_CONFIG_DIRECTORY
 V54: ULT (ADD loadConfigVA 0x40) optHdr.SizeOfImage term
 
 # Make sure that the headers are copied in memory after mapping
-V55: UGE optHdr.SizeOfHeaders (ADD dosHdr.e_lfanew 0x5d) term
+V55(!V32): UGE optHdr.SizeOfHeaders (ADD dosHdr.e_lfanew 0x5d) term
 
 #### MiRelocateImage: checks that the relocation directory lies within the file
 P: relocDir <- optHdr.DataDirectory[40, 8] as _IMAGE_DATA_DIRECTORY
@@ -243,3 +243,6 @@ P: relocVA <- relocDir.VirtualAddress
 P: relocSize <- relocDir.Size
 V56: UGE optHdr.NumberOfRvaAndSizes 5
 G5(V56): AND (ULE relocSize FILESIZE) (ULT ADD relocVA relocSize FILESIZE) term
+
+### makes sure this is not marked as a DLL
+V59: Eq (BITAND progHdr.Characteristics 0x2000) 0 term

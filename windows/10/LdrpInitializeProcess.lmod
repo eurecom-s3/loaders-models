@@ -18,7 +18,7 @@ V1: OR (Eq optHdr.AddressOfEntryPoint 0) (UGE optHdr.AddressOfEntryPoint optHdr.
 
 ## Needs relocation?
 # V2: UGE optHdr.ImageBase 0x80000000
-V2: UGE optHdr.ImageBase 0x80000000
+V2: OR (EQ optHdr.ImageBase 0) (UGE optHdr.ImageBase 0x80000000)
 
 G1: ULE nSections 5 term
 G99: NEq nSections 0 term
@@ -46,7 +46,7 @@ G7(V6): ULT relocSize 0x100 term
 
 ### If the image is relocated, but doesn't have the reloc table, check that it wasn't stripped away, in which case the image is invalid
 #### LdrRelocateImageWithBias:46,49
-V7(V2, !V6): EQ BITAND fileHdr.Characteristics 1 1 term
+V7(V2, !V6): EQ BITAND fileHdr.Characteristics 1 0 term
 
 P: tmpSize <- relocSize
 P(V6): loopStart <- relocVA
@@ -56,19 +56,20 @@ L2(V6): relocBlockAddr <- VLOOP(loopStart, nextBlockAddr, V99, 1)
     P: blockPage <- relocBlock[0, 3]
     G6: ULT blockPage 2 term
     P: firstEntryAddr <- ADD relocBlockAddr 8
-    P: nEntry <- SHR (SUB blockSize 8) 2
+    P: nEntry <- SHR (SUB blockSize 8) 1
     P: tmpSize <- SUB tmpSize blockSize
     P: nextBlockAddr <- ADD relocBlockAddr blockSize
     V99: UGT tmpSize 0
 
     P: tmpEntry <- INT 0 4
-    L3: entryAddr <- VLOOP(firstEntryAddr, nextBAddr, V98, 1)
+    V96: UGE nEntry 1
+    L3(V96): entryAddr <- VLOOP(firstEntryAddr, nextBAddr, V98, 1)
         P: entry <- HEADER[entryAddr, 2]
         P: tmpEntry <- ADD tmpEntry 1
         P: nextBAddr <- ADD entryAddr 2
 
-        P: relocType <- BITAND entry[0] 0xf
-        P: relocAddr <- SHR (BITAND entry 0xfff0) 4
+        P: relocType <- SHR BITAND entry[1] 0xf0 4
+        P: relocAddr <- BITAND entry 0xfff
 
 	V11: EQ (BITAND (SHL one (SHR entry 12)) 0x3a0) 0 term
         V12: OR EQ relocType 10 ULE relocType 4 term
@@ -79,8 +80,9 @@ L2(V6): relocBlockAddr <- VLOOP(loopStart, nextBlockAddr, V99, 1)
         P(V14): tmpEntry <- ADD tmpEntry 1
         P(V14): nextBAddr <- ADD nextBAddr 2
 
-        V98: ULE tmpEntry nEntry
+        V98: ULT tmpEntry nEntry
     END L3
+    V97: EQ tmpEntry nEntry term
 END L2
 G4: EQ tmpSize 0 term
 
@@ -107,7 +109,8 @@ V17: ULT (ADD certDirSize certDirVA) FILESIZE term
 
 ### LdrpCheckForSafeDiscImage
 #### Implicit constraints due to dereferencing fields in the headers
-V18: UGT SUB optHdr.SizeOfHeaders 0x2c 0 term
+#### GT, not UGT
+V18: GT SUB optHdr.SizeOfHeaders 0x2c 0 term
 V19: ULT ADD optHdr.SizeOfHeaders 0x13 FILESIZE term
 
 ### LdrpInitializeTls
