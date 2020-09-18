@@ -1,0 +1,33 @@
+LOADREL ntkrnlmp
+
+DEFINE FILESIZE 500
+INPUT HEADER FILESIZE as DOSHeader
+
+P: NT_HEADER <- HEADER[HEADER.e_lfanew, sizeof _IMAGE_NT_HEADERS] as _IMAGE_NT_HEADERS
+P: progHdr <- NT_HEADER.FileHeader as _IMAGE_FILE_HEADER
+P: optHdr <- NT_HEADER.OptionalHeader as _IMAGE_OPTIONAL_HEADER
+
+V1: ULE optHdr.SectionAlignment 0x800 term
+#G1: EQ optHdr.ImageBase 0x10000 term
+
+### Copy actually executed code
+P: entryPointRVA <- optHdr.AddressOfEntryPoint
+P: realEntryPointOff <- entryPointRVA
+FROMFILE x86ret0 HEADER realEntryPointOff 0 3
+
+### Create fake section
+P: sectTabOff <- ADD HEADER.e_lfanew (ADD progHdr.SizeOfOptionalHeader 24)
+P: nSect <- progHdr.NumberOfSections
+G2: EQ nSect 1 term
+P: section <- HEADER[sectTabOff, 40] AS _IMAGE_SECTION_HEADER
+P: RVA <- section.VirtualAddress
+G3: NEq RVA 0 term
+G4: EQ (ADD RVA 0x10) entryPointRVA term
+P: sizeRawData <- section.SizeOfRawData
+G5: UGE sizeRawData 6 term
+P: VirtSize <- section.VirtualSize
+G6: EQ VirtSize sizeRawData term
+### Populate the section with some code
+P: fakeEntryPointOff <- ADD section.PointerToRawData 0x10
+#FROMFILE x86ret1 HEADER fakeEntryPointOff 0 6
+

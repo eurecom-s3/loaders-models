@@ -1,0 +1,59 @@
+LOADREL ntkrnlmp
+
+DEFINE FILESIZE 500
+
+INPUT HEADER FILESIZE
+
+#### Handy constant
+P: zero <- INT 0 4
+
+#### Alias for DosHeader
+P: dosHdr <- HEADER as DOSHeader
+#### NT Headers
+
+P: ntHdr <- HEADER[dosHdr.e_lfanew, sizeof _IMAGE_NT_HEADERS] as _IMAGE_NT_HEADERS
+
+#### Program Header
+P: progHdr <- ntHdr.FileHeader as _IMAGE_FILE_HEADER
+
+#### Optional Header
+P: optHdr <- ntHdr.OptionalHeader as _IMAGE_OPTIONAL_HEADER
+
+V1: UGE optHdr.NumberOfRvaAndSizes 1
+V2(V1): EQ optHdr.DataDirectory[0, 8] 0 term
+
+V3: UGE optHdr.NumberOfRvaAndSizes 2
+V4(V3): EQ optHdr.DataDirectory[8, 8] 0 term
+
+V5: UGE optHdr.NumberOfRvaAndSizes 3
+V6(V5): EQ optHdr.DataDirectory[16, 8] 0 term
+
+V7: UGE optHdr.NumberOfRvaAndSizes 4
+V8(V7): EQ optHdr.DataDirectory[24, 8] 0 term
+
+V9: UGE optHdr.NumberOfRvaAndSizes 5
+V10(V9): EQ optHdr.DataDirectory[32, 8] 0 term
+
+V11: UGE optHdr.NumberOfRvaAndSizes 7
+V12(V11): EQ optHdr.DataDirectory[48, 8] 0 term
+
+V13: UGE optHdr.NumberOfRvaAndSizes 9
+V14(V13): EQ optHdr.DataDirectory[64, 8] 0 term
+
+V15: UGE optHdr.NumberOfRvaAndSizes 10
+V16(V15): EQ optHdr.DataDirectory[72, 8] 0 term
+
+V17: UGE optHdr.NumberOfRvaAndSizes 11
+V18(V17): EQ optHdr.DataDirectory[80, 8] 0 term
+
+V19: UGE optHdr.NumberOfRvaAndSizes 12
+V20(V19): EQ optHdr.DataDirectory[88, 8] 0 term
+
+V21: UGE optHdr.NumberOfRvaAndSizes 13
+V22(V21): EQ optHdr.DataDirectory[96, 8] 0 term
+
+V23: UGE optHdr.NumberOfRvaAndSizes 14
+V24(V23): EQ optHdr.DataDirectory[104, 8] 0 term
+
+V25: UGE optHdr.NumberOfRvaAndSizes 15
+V26(V25): EQ optHdr.DataDirectory[112, 8] 0 term

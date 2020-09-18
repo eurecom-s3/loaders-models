@@ -8,7 +8,7 @@ P: progHdr <- NT_HEADER.FileHeader as _IMAGE_FILE_HEADER
 P: optHdr <- NT_HEADER.OptionalHeader as _IMAGE_OPTIONAL_HEADER
 
 V1: UGE optHdr.SectionAlignment 0x1000
-G1: ULT optHdr.ImageBase 0x40000000 term
+#G1: ULT optHdr.ImageBase 0x40000000 term
 P: entryPointOff <- INT 0 4
 P: entryPointRVA <- optHdr.AddressOfEntryPoint
 P(!V1): entryPointOff <- entryPointRVA
@@ -32,11 +32,5 @@ L1(V1): section <- LOOP(HEADER, sectTabOff, 40, nSect, 5) AS _IMAGE_SECTION_HEAD
     G4(V3): EQ section.Characteristics[3] 0x70 term
     G5(V3): AND NEq sectOff 0 UGT sizeRawData 3 term
 END L1
-
-G6: NEQ entryPointOff 0 term
-G7: EQ optHdr.SectionAlignment 0x1000 term
-
-#### temp
-G99: EQ optHdr.DataDirectory 0 term
 
 FROMFILE x86ret0 HEADER entryPointOff 0 3

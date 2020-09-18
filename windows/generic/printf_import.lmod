@@ -14,7 +14,7 @@ G1: EQ optHdr.Subsystem 3 term
 
 ## SectionAlignment < 0x1000 prevents import table to be scattered at random addresses
 G2: ULT optHdr.SectionAlignment 0x1000 term
-G3: UGE optHdr.NumberOfRvaAndSizes 2 term
+G3: EQ optHdr.NumberOfRvaAndSizes 16 term
 
 ## Prepare import directory
 P: importDir <- optHdr.DataDirectory[8, 8] as _IMAGE_DATA_DIRECTORY
@@ -39,7 +39,14 @@ G12: STRCMP HEADER lookupTable[0, 4] '\x00\x00printf\x00' term
 G13: EQ lookupTable[4, 4] 0 term
 G14: EQ lookupTable addressTable term
 
-P: otherDirs <- optHdr.DataDirectory[16, 126]
-G15: EQ otherDirs 0 term
+## Fix IAT directory too
+P: iatDir <- optHdr.DataDirectory[96, 8] as _IMAGE_DATA_DIRECTORY
+G15: EQ iatDir.VirtualAddress importEntry1.FirstThunk term
+G16: EQ iatDir.Size 8 term
+
+P: otherDirs1 <- optHdr.DataDirectory[16, 80]
+G17: EQ otherDirs1 0 term
+P: otherDirs2 <- optHdr.DataDirectory[104, 24]
+G18: EQ otherDirs2 0 term
 
 FROMFILE x86printfimport HEADER entryPoint 0 44
