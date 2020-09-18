@@ -36,7 +36,8 @@ P: relocVA <- relocDir.VirtualAddress
 P: relocSize <- relocDir.Size
 
 #### LdrRelocateImageWithBias:32
-V5(V4): AND (AND NEq relocVA 0 NEq relocSize 0) ULT relocVA imageEnd
+# V5(V4): AND (AND NEq relocVA 0 NEq relocSize 0) ULT relocVA imageEnd
+V5(V4): AND (UGE optHdr.NumberOfRvaAndSizes 5) AND (NEq relocVA 0) (NEq relocSize 0)
 
 ### If the image is relocated, but doesn't have the reloc table, check that it wasn't stripped away, in which case the image is invalid
 #### LdrRelocateImageWithBias:55
@@ -44,27 +45,30 @@ V6(V4, !V5): Eq BITAND fileHdr.Characteristics 0x1 0 term
 
 P: tmpSize <- relocSize
 P(V5): loopStart <- relocVA
-L1(V5): relocBlockAddr <- VLOOP(loopStart, nextBlockAddr, V99, 5)
+L1(V5): relocBlockAddr <- VLOOP(loopStart, nextBlockAddr, V99, 1)
     P: relocBlock <- HEADER[relocBlockAddr, 8]
     P: blockSize <- relocBlock[4, 3]
     P: blockPage <- relocBlock[0, 3]
+    G6: ULT blockPage 2 term
     P: firstEntryAddr <- ADD relocBlockAddr 8
-    P: nEntry <- SHR (SUB blockSize 8) 2
+    P: nEntry <- SHR (SUB blockSize 8) 1
     P: tmpSize <- SUB tmpSize blockSize
     P: nextBlockAddr <- ADD relocBlockAddr blockSize
     V99: UGT tmpSize 0
 
     P: tmpEntry <- INT 0 4
-    L2: entryAddr <- VLOOP(firstEntryAddr, nextBAddr, V98, 5)
+    V96: UGE nEntry 1
+    L2(V96): entryAddr <- VLOOP(firstEntryAddr, nextBAddr, V98, 1)
         P: entry <- HEADER[entryAddr, 2]
         P: tmpEntry <- ADD tmpEntry 1
         P: nextBAddr <- ADD entryAddr 2
 
-        P: relocType <- BITAND entry[0] 0xf
-        P: relocAddr <- SHR (BITAND entry 0xfff0) 4
+        P: relocType <- SHR BITAND entry[1] 0xf0 4
+        P: relocAddr <- BITAND entry 0xfff
 
         V7: AND ULE relocType 10 NEq relocType 8 term
         V8: ULT ADD blockPage relocAddr imageEnd term
+	G13: ULT ADD blockPage relocAddr FILESIZE term
 
         ## RelocType 4 uses two entries instead of 1
         V9: Eq relocType 4
@@ -73,17 +77,19 @@ L1(V5): relocBlockAddr <- VLOOP(loopStart, nextBlockAddr, V99, 5)
 
         V98: ULE tmpEntry nEntry
     END L2
-
+    V97: EQ tmpEntry nEntry term
 END L1
+G4: EQ tmpSize 0 term
 
 
 ### LdrpCheckForSafeDiscImage
 #### Implicit constraints due to dereferencing fields in the headers
-V10: UGT SUB optHdr.SizeOfHeaders 0x2c 0 term
+#### This is GT and not UGT to prevent undeflow!!!!!!
+V10: GT SUB optHdr.SizeOfHeaders 0x2c 0 term
 V11: ULT ADD optHdr.SizeOfHeaders 0x13 FILESIZE term
 ### This is the trickiest one. The header content is copied up to SizeOfHeader bytes.
 ### The SizeOfHeader field needs to be among the bytes of the header that are copied, otherwise its default value (0x0) will be used for pointer arithmetic, leading to invalid memory accesses
-V111: UGE optHdr.SizeOfHeaders ADD HEADER.e_lfanew 0x58 term
+V111(V1): UGE optHdr.SizeOfHeaders ADD HEADER.e_lfanew 0x5d term
 
 ### LdrpCheckForSecuROMImage
 #### Other implicit constraints, like the one above
