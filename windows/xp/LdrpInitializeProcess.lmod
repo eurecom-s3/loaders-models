@@ -37,7 +37,7 @@ P: relocSize <- relocDir.Size
 
 #### LdrRelocateImageWithBias:32
 # V5(V4): AND (AND NEq relocVA 0 NEq relocSize 0) ULT relocVA imageEnd
-V5(V4): AND (UGE optHdr.NumberOfRvaAndSizes 5) AND (NEq relocVA 0) (NEq relocSize 0)
+V5(V4): AND (UGE optHdr.NumberOfRvaAndSizes 6) AND (NEq relocVA 0) (NEq relocSize 0)
 
 ### If the image is relocated, but doesn't have the reloc table, check that it wasn't stripped away, in which case the image is invalid
 #### LdrRelocateImageWithBias:55
@@ -47,14 +47,14 @@ P: tmpSize <- relocSize
 P(V5): loopStart <- relocVA
 L1(V5): relocBlockAddr <- VLOOP(loopStart, nextBlockAddr, V99, 1)
     P: relocBlock <- HEADER[relocBlockAddr, 8]
-    P: blockSize <- relocBlock[4, 3]
-    P: blockPage <- relocBlock[0, 3]
+    P: blockSize <- relocBlock[4, 4]
+    P: blockPage <- relocBlock[0, 4]
     G6: ULT blockPage 2 term
     P: firstEntryAddr <- ADD relocBlockAddr 8
     P: nEntry <- SHR (SUB blockSize 8) 1
     P: tmpSize <- SUB tmpSize blockSize
     P: nextBlockAddr <- ADD relocBlockAddr blockSize
-    V99: UGT tmpSize 0
+    V99: Neq tmpSize 0
 
     P: tmpEntry <- INT 0 4
     V96: UGE nEntry 1

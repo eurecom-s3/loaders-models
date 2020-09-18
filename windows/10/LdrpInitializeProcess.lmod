@@ -40,7 +40,7 @@ P: relocVA <- relocDir.VirtualAddress
 P: relocSize <- relocDir.Size
 
 #### LdrRelocateImageWithBias:45,48
-V6(V2): AND (UGE optHdr.NumberOfRvaAndSizes 5) AND (NEq relocVA 0) (NEq relocSize 0)
+V6(V2): AND (UGE optHdr.NumberOfRvaAndSizes 6) AND (NEq relocVA 0) (NEq relocSize 0)
 #V6(V2): AND (UGE optHdr.NumberOfRvaAndSizes 5) AND (NEq relocVA 0) (NEq relocSize 0) term
 G7(V6): ULT relocSize 0x100 term
 
@@ -52,14 +52,15 @@ P: tmpSize <- relocSize
 P(V6): loopStart <- relocVA
 L2(V6): relocBlockAddr <- VLOOP(loopStart, nextBlockAddr, V99, 1)
     P: relocBlock <- HEADER[relocBlockAddr, 8]
-    P: blockSize <- relocBlock[4, 3]
-    P: blockPage <- relocBlock[0, 3]
+    P: blockSize <- relocBlock[4, 4]
+    P: blockPage <- relocBlock[0, 4]
     G6: ULT blockPage 2 term
     P: firstEntryAddr <- ADD relocBlockAddr 8
     P: nEntry <- SHR (SUB blockSize 8) 1
     P: tmpSize <- SUB tmpSize blockSize
     P: nextBlockAddr <- ADD relocBlockAddr blockSize
-    V99: UGT tmpSize 0
+
+    V99: NEq tmpSize 0
 
     P: tmpEntry <- INT 0 4
     V96: UGE nEntry 1
@@ -84,7 +85,7 @@ L2(V6): relocBlockAddr <- VLOOP(loopStart, nextBlockAddr, V99, 1)
     END L3
     V97: EQ tmpEntry nEntry term
 END L2
-G4: EQ tmpSize 0 term
+V95: EQ tmpSize 0 term
 
 ### LdrpCheckForSecuROMImage
 #### Other implicit constraints, like the one above
