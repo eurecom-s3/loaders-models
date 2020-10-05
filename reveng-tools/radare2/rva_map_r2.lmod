@@ -1,0 +1,40 @@
+############################################
+## libr/bin/format/pe.c:bin_pe_rva_to_paddr
+############################################
+
+LOADREL ntkrnlmp
+
+DEFINE FILESIZE 500
+
+INPUT HEADER FILESIZE
+INPUT RVA 4
+OUTPUT OFF 4
+OUTPUT VAL 1
+OUTPUT ERROR 1
+
+P: sectOff <- SECT HEADER
+P: nSect <- NSECT HEADER
+P: optHdr <- OPTHDR HEADER as _IMAGE_OPTIONAL_HEADER
+
+P: notFound <- INT 0 (sizeof _IMAGE_SECTION_HEADER)
+P: found <- notFound as _IMAGE_SECTION_HEADER
+
+L1: sect <- LOOP(HEADER, sectOff, (sizeof _IMAGE_SECTION_HEADER), nSect, 5) AS _IMAGE_SECTION_HEADER
+
+    P: SRVA <- sect.VirtualAddress
+    P: ERVA <- ADD SRVA sect.VirtualSize
+    V1: AND (EQ found notFound) (AND (UGE RVA SRVA) (ULT RVA ERVA))
+    P(V1): found <- sect
+
+END L1
+
+V2: EQ found notFound
+V3(V2): EQ OFF RVA term
+
+P: fOff <- found.PointerToRawData
+P: sOff <- SUB RVA found.VirtualAddress
+V4(!V2): EQ OFF ADD sOff fOff term
+
+V5: UGT OFF FILESIZE
+V6(V5): EQ ERROR 1 term
+V7(!V5): AND (EQ ERROR 0) (EQ VAL HEADER[RVA]) term
