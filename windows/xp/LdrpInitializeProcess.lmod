@@ -96,7 +96,7 @@ V111(V1): UGE optHdr.SizeOfHeaders ADD HEADER.e_lfanew 0x5d term
 P: debugDir <- optHdr.DataDirectory[48, 8] as _IMAGE_DATA_DIRECTORY
 P: debugVA  <- debugDir.VirtualAddress
 P: debugSize <- debugDir.Size
-P: nDebugEntry <- DIV debugSize 28
+P: nDebugEntry <- UDIV debugSize 28
 V12: NEq debugSize 0
 V13(V12): ULT ADD debugVA 0x1c FILESIZE term
 G14: ULE nDebugEntry 5 term

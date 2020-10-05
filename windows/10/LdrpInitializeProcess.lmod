@@ -12,6 +12,7 @@ P: optHdr <- NT_HEADER.OptionalHeader as _IMAGE_OPTIONAL_HEADER
 P: nSections <- fileHdr.NumberOfSections
 P: sectionTableOffset <- ADD HEADER.e_lfanew (ADD fileHdr.SizeOfOptionalHeader 24)
 P: imageEnd <- ADD optHdr.ImageBase optHdr.SizeOfImage
+G999: NOT OVFLADD optHdr.ImageBase optHdr.SizeOfImage term
 
 #### LdrpValidateEntrySection
 V1: OR (Eq optHdr.AddressOfEntryPoint 0) (UGE optHdr.AddressOfEntryPoint optHdr.SizeOfHeaders) term
@@ -19,15 +20,15 @@ V1: OR (Eq optHdr.AddressOfEntryPoint 0) (UGE optHdr.AddressOfEntryPoint optHdr.
 ## Needs relocation?
 # V2: UGE optHdr.ImageBase 0x80000000
 V2: OR (EQ optHdr.ImageBase 0) (UGE optHdr.ImageBase 0x80000000)
-
 G1: ULE nSections 5 term
 G99: NEq nSections 0 term
+P: defaultNewBase <- INT 0x10000 4
 L1(V2): section <- LOOP(HEADER, sectionTableOffset, 40, nSections, 5) AS _IMAGE_SECTION_HEADER
     P: size <- section.SizeOfRawData
     P: VA <- section.VirtualAddress
     P: endSect <- ADD VA (ALIGNUP size optHdr.SectionAlignment)
     P: charact <- section.Characteristics
-    V3: AND (OR (ULT VA optHdr.ImageBase) (UGT endSect imageEnd)) (NEq size 0)
+    V3: OR (AND (UGT endSect imageEnd) (NEq size 0)) (UGT ADD defaultNewBase VA 0x80000000)
     V4(V3): EQ (BITAND charact[3] 0x80) 0x80 term
 END L1
 
@@ -72,6 +73,15 @@ L2(V6): relocBlockAddr <- VLOOP(loopStart, nextBlockAddr, V99, 1)
         P: relocType <- SHR BITAND entry[1] 0xf0 4
         P: relocAddr <- BITAND entry 0xfff
 
+	## LdrRelocateImageWithBias:47
+	### Checks that the RtlImageNtHeader is still valid
+	### Meaning that the targeted addre can't be 0x0 or 0x1...
+	V15: OR (EQ relocType 0) AND (NEQ relocAddr 0) (NEQ relocAddr 1) term
+	### Can't overlap with e_lfanew (0x3f-0x40)
+	V16: OR (EQ relocType 0) OR (ULT relocAddr 0x3f) (UGT relocAddr 0x40) term
+	### Cant' overlap with PE magic (e_lfanew-e_lfanew+4)
+	V17: OR (EQ relocType 0) OR (ULT relocAddr HEADER.e_lfanew) (UGT relocAddr ADD HEADER.e_lfanew 4) term
+
 	V11: EQ (BITAND (SHL one (SHR entry 12)) 0x3a0) 0 term
         V12: OR EQ relocType 10 ULE relocType 4 term
         V13: ULT ADD blockPage relocAddr imageEnd term
@@ -85,17 +95,17 @@ L2(V6): relocBlockAddr <- VLOOP(loopStart, nextBlockAddr, V99, 1)
     END L3
     V97: EQ tmpEntry nEntry term
 END L2
-V95: EQ tmpSize 0 term
+G95: EQ tmpSize 0 term
 
 ### LdrpCheckForSecuROMImage
 #### Other implicit constraints, like the one above
 P: debugDir <- optHdr.DataDirectory[48, 8] as _IMAGE_DATA_DIRECTORY
 P: debugVA  <- debugDir.VirtualAddress
 P: debugSize <- debugDir.Size
-P: nDebugEntry <- DIV debugSize 28
-V15: NEq debugSize 0
-G2: ULE nDebugEntry 5 term
-L4: debugEntry <- LOOP(HEADER, debugVA, 0x1c, nDebugEntry, 5) as _IMAGE_DEBUG_DIRECTORY
+P: nDebugEntry <- UDIV debugSize 28
+V151: AND ULT optHdr.SectionAlignment 0x1000 NEq debugSize 0
+G2(V151): AND (ULT optHdr.SectionAlignment 0x1000) (ULE nDebugEntry 5) term
+L4(V151): debugEntry <- LOOP(HEADER, debugVA, 0x1c, nDebugEntry, 5) as _IMAGE_DEBUG_DIRECTORY
     P: dbgEntrySize <- debugEntry.SizeOfData
     P: dbgPtrData <- debugEntry.PointerToRawData
     V16: ULT (ADD dbgEntrySize dbgPtrData) FILESIZE term
@@ -106,7 +116,7 @@ P: certDir <- optHdr.DataDirectory[32, 8] as _IMAGE_DATA_DIRECTORY
 P: certDirVA <- certDir.VirtualAddress
 P: certDirSize <- certDir.Size
 G3: EQ certDir 0 term
-V17: ULT (ADD certDirSize certDirVA) FILESIZE term
+V17: ULE (ADD certDirSize certDirVA) FILESIZE term
 
 ### LdrpCheckForSafeDiscImage
 #### Implicit constraints due to dereferencing fields in the headers
@@ -122,3 +132,61 @@ V20: AND (UGT optHdr.NumberOfRvaAndSizes 9) (NEq tlsDir.VirtualAddress 0)
 V21(V20): UGT (SUB 0xffffffff tlsDir.VirtualAddress) tlsDir.Size term
 V22(V20): ULE tlsDirEnd imageEnd term
 G5: OR (ULE optHdr.NumberOfRvaAndSizes 9) (Eq tlsDir 0) term
+
+### LdrpGetImportDescriptorForSnap
+#### If the import directory has VA (no matter the number of RVAs) the size can't be 0
+P: importDir <- optHdr.DataDirectory[8, 8] as _IMAGE_DATA_DIRECTORY
+V23: OR (NEq importDir.Size 0) (EQ importDir.VirtualAddress 0) term
+G8: EQ importDir 0 term
+
+### LdrpProcessMappedModule
+P: ldDir <- optHdr.DataDirectory[80, 16] as _IMAGE_DATA_DIRECTORY
+P: ldVA <- ldDir.VirtualAddress
+P: ldSize <- ldDir.Size
+P: majSub <- optHdr.MajorSubsystemVersion
+P: minSub <- optHdr.MinorSubsystemVersion
+V24: OR (UGE majSub 7) (AND (EQ majSub 6) (UGE minSub 3))
+V25(V24): AND (ULT (ADD ldVA 120) imageEnd) (NOT OVFLADD ldVA 120) term
+V26(V24): AND (GT optHdr.NumberOfRvaAndSizes 10) (UGE ldSize 0x40) term
+V27(V24): UGE optHdr.SectionAlignment 0x1000
+P: ldOff <- INT 0 4
+P(V24, !V27): ldOff <- ldVA
+P: found <- INT 0 1
+L5(V27): section <- LOOP(HEADER, sectionTableOffset, 40, nSections, 5) AS _IMAGE_SECTION_HEADER
+    P: RVA <- section.VirtualAddress
+    P: sizeRawData <- section.SizeOfRawData
+    P: VirtSize <- section.VirtualSize
+    P: size <- VirtSize
+    V28: ULT section.PointerToRawData 0x200
+    P: sectOff <- section.PointerToRawData
+    P(V28): sectOff <- ALIGNDOWN section.PointerToRawData optHdr.FileAlignment
+    G9: GT section.PointerToRawData 0 term
+
+    V29: EQ VirtSize 0
+    P(V29): size <- sizeRawData
+    P: sectEnd <- ADD RVA size
+
+    V30: AND (ULE RVA ldVA) (UGT sectEnd ldVA)
+    P(V30): found <- INT 1 1
+    P(V30): ldOff <- ADD sectOff (SUB ldVA RVA)
+    G10(V30): AND NEq ldOff 0 UGT sizeRawData 124 term
+
+    G11(V30): AND (NOT OVFLADD sectOff sizeRawData) (ULT ADD sectOff sizeRawData FILESIZE) term
+
+END L5
+
+V30(V27): EQ found 1 term
+V31(V27): NEQ ldOff 0 term
+P: cookieAddr <- HEADER[ADD ldOff 60, 4]
+P: ldCharact <- HEADER[ldOff, 4]
+
+V32(V24, !V2): AND (UGT cookieAddr optHdr.ImageBase) (ULT (ADD cookieAddr 4) imageEnd) term
+G33(V24, V2): AND (UGT cookieAddr 0x10000) (ULT (ADD cookieAddr 4) (ADD optHdr.SizeOfImage 0x10000)) term
+G14(V24): EQ cookieAddr ADD ldVA 120
+P: cookieOff <- ADD ldOff 120
+G15(V24): EQ HEADER[cookieOff, 4] 0xBB40E64E term
+
+V35(V24): UGE ldCharact 0x48 term
+
+P: exportDir <- optHdr.DataDirectory[0, 8]
+G16: EQ exportDir 0 term

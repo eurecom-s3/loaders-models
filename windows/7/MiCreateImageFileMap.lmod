@@ -42,11 +42,16 @@ V19: Eq 0 BITAND optHdr.ImageBase 0xffff term
 
 ## MiCreateImageFileMap:324
 P: sectTableSize <- MUL progHeader.NumberOfSections 40
-P: totalSizeHdrs <- ADD progHeader.SizeOfOptionalHeader ADD sectTableSize ADD zero 0x18
+P: totalSizeHdrs <- optHdr.SizeOfHeaders
+P: sizeHdrsSect <- ADD ADD ADD progHeader.SizeOfOptionalHeader 0x18 sectTableSize (BITAND  HEADER.e_lfanew 0xfff)
+V121: ULT optHdr.SizeOfHeaders sizeHdrsSect
+P(V121): totalSizeHdrs <- sizeHdrsSect
 V20: ULT totalSizeHdrs optHdr.SizeOfImage term
 
 ### MiCreateImageFileMap:370
-V98: ULE (ADD totalSizeHdrs HEADER.e_lfanew) FILESIZE term
+P: tmpV36 <- ADD ADD progHeader.SizeOfOptionalHeader 0x18 HEADER.e_lfanew
+P: tmpV37 <- ADD (BITAND tmpV36 0xfff) (MUL progHeader.NumberOfSections 40)
+V98: ULE tmpV37 FILESIZE term
 
 ## Start of MiBuildImageControlArea
 ### line 51

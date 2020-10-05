@@ -76,7 +76,6 @@ V16: UGE optHdr.SectionAlignment optHdr.FileAlignment term
 V17: ULE optHdr.SizeOfImage 0x77000000 term
 
 # line 139
-#V18: OR (EQ progHdr.Machine 0x14c) (EQ progHdr.Machine 0x1c4) term
 V18: EQ progHdr.Machine 0x14c term
 
 # line 144
@@ -86,13 +85,13 @@ V19: ULT optHdr.SizeOfHeaders optHdr.SizeOfImage term
 V20: EQ optHdr.ImageBase[0, 2] 0 term
 
 # line 154
-V21: AND (NEQ progHdr.Machine 0x14C) (NEQ progHdr.Machine 0x8664)
+#V21: AND (NEQ progHdr.Machine 0x14C) (NEQ progHdr.Machine 0x8664)
 
 # line 156
-V22(V21): NEq BITAND progHdr.Machine 1 1 term
+#V22(V21): NEq BITAND progHdr.Machine 1 1 term
 
 # line 161
-V23(V21): EQ BITAND optHdr.DllCharacteristics 0x140 0x140 term
+#V23(V21): EQ BITAND optHdr.DllCharacteristics 0x140 0x140 term
 
 #V24(!V21): EQ BITAND optHdr.DllCharacteristics 0x1000 0x1000 term
 ######### End of MiVerifyImageHeader
@@ -171,8 +170,8 @@ L1: section <- LOOP(HEADER, offSectTable, 40, nSect, 5) AS _IMAGE_SECTION_HEADER
   # Common to both branch of the SectionAlingment < 0x1000
   # lines 73 & 127
   P: sectSize <- section.VirtualSize
-  V38: EQ section.VirtualSize 0
-  P(V38): sectSize <- section.SizeOfRawData
+  V381: EQ section.VirtualSize 0
+  P(V381): sectSize <- section.SizeOfRawData
 
   # line 80
   V39(V32): NOT OVFLADD section.SizeOfRawData section.PointerToRawData term
@@ -191,7 +190,7 @@ L1: section <- LOOP(HEADER, offSectTable, 40, nSect, 5) AS _IMAGE_SECTION_HEADER
 
   P: VA <- ADD optHdr.ImageBase section.VirtualAddress
   V44(!V32): EQ VA startOfNextSect term
-
+  P(!V32): startOfNextSect <- ADD startOfNextSect (ALIGNUP sectSize optHdr.SectionAlignment)
   V45(!V32): UGT (ADD sectSize SUB optHdr.SectionAlignment 1) sectSize term
 
   P(!V32): nPagesSect <- SHR ALIGNUP sectSize optHdr.SectionAlignment 12
@@ -201,7 +200,7 @@ L1: section <- LOOP(HEADER, offSectTable, 40, nSect, 5) AS _IMAGE_SECTION_HEADER
 
   # line 185
   P: endRawData <- ADD section.SizeOfRawData section.PointerToRawData
-  V47(!V32): UGT ALIGNUP endRawData optHdr.FileAlignment section.PointerToRawData term
+  V47(!V32): UGE ALIGNUP endRawData optHdr.FileAlignment section.PointerToRawData term
 
 END L1
 

@@ -66,10 +66,12 @@ P: nPagesSections <- SUB npages nPagesHdrs
 P: lastSectionEnd <- ADD optHdr.ImageBase MUL nPagesHdrs 4096
 P: tmpNpages <- nPagesSections
 
+
 P: sectionTableOffset <- ADD HEADER.e_lfanew (ADD progHeader.SizeOfOptionalHeader 24)
 P: nSections <- progHeader.NumberOfSections
+
 # This avoids unconstrained sections
-G98: ULE nSections 5 term
+G98: ULE nSections 1 term
 L1: section <- LOOP(HEADER, sectionTableOffset, (sizeof _IMAGE_SECTION_HEADER), nSections, 5) AS _IMAGE_SECTION_HEADER
 
     # lines (469, 470), and (492, 494)
@@ -78,6 +80,7 @@ L1: section <- LOOP(HEADER, sectionTableOffset, (sizeof _IMAGE_SECTION_HEADER), 
     P: sectionSize <- virtSize
     V23: Eq virtSize 0
     P(V23): sectionSize <- sizeRawData
+
 
     # line 509
     V24(V20): NEq sectionSize 0 term

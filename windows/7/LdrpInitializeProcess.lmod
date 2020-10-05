@@ -18,12 +18,13 @@ V1: UGE optHdr.ImageBase 0x70000000
 
 G1: ULE nSections 5 term
 G99: NEq nSections 0 term
+P: defaultNewBase <- INT 0x10000 4
 L1(V1): section <- LOOP(HEADER, sectionTableOffset, 40, nSections, 5) AS _IMAGE_SECTION_HEADER
     P: size <- section.SizeOfRawData
     P: VA <- section.VirtualAddress
-    P: endSect <- ADD VA (ALIGNUP size optHdr.SectionAlignment)
+    P: endSect <- ADD ADD optHdr.ImageBase VA (ALIGNUP size optHdr.SectionAlignment)
     P: charact <- section.Characteristics
-    V2: AND (OR (ULT VA optHdr.ImageBase) (UGT endSect imageEnd)) (NEq size 0)
+    V2: OR (AND (UGT endSect imageEnd) (NEq size 0)) (UGT ADD defaultNewBase VA 0x80000000)
     V3(V2): EQ (BITAND charact[3] 0x80) 0x80 term
 END L1
 
@@ -70,7 +71,7 @@ L2(V10): relocBlockAddr <- VLOOP(loopStart, nextBlockAddr, V99, 1)
     P: nEntry <- SHR (SUB blockSize 8) 1
     P: tmpSize <- SUB tmpSize blockSize
     P: nextBlockAddr <- ADD relocBlockAddr blockSize
-    V99: UGT tmpSize 0
+    V99: NEQ tmpSize 0
 
     P: tmpEntry <- INT 0 4
     V96: UGE nEntry 1
@@ -89,7 +90,7 @@ L2(V10): relocBlockAddr <- VLOOP(loopStart, nextBlockAddr, V99, 1)
 	## LdrRelocateImageWithBias:47
 	### Checks that the RtlImageNtHeader is still valid
 	### Meaning that the targeted addre can't be 0x0 or 0x1...
-	V15: AND (NEQ relocAddr 0) (NEQ relocAddr 1) term
+	V15: OR (EQ relocType 0) AND (NEQ relocAddr 0) (NEQ relocAddr 1) term
 	### Can't overlap with e_lfanew (0x3f-0x40)
 	V16: OR (ULT relocAddr 0x3f) (UGT relocAddr 0x40) term
 	### Cant' overlap with PE magic (e_lfanew-e_lfanew+4)
@@ -104,6 +105,7 @@ L2(V10): relocBlockAddr <- VLOOP(loopStart, nextBlockAddr, V99, 1)
     END L3
     V97: EQ tmpEntry nEntry term
 END L2
+
 G4: EQ tmpSize 0 term
 
 ### LdrpCheckForSafeDiscImage
@@ -117,10 +119,10 @@ V16: ULT ADD optHdr.SizeOfHeaders 0x13 FILESIZE term
 P: debugDir <- optHdr.DataDirectory[48, 8] as _IMAGE_DATA_DIRECTORY
 P: debugVA  <- debugDir.VirtualAddress
 P: debugSize <- debugDir.Size
-P: nDebugEntry <- DIV debugSize 28
-V17: NEq debugSize 0
+P: nDebugEntry <- UDIV debugSize 28
+V17: AND ULT optHdr.SectionAlignment 0x1000 NEq debugSize 0
 G18: ULE nDebugEntry 5 term
-L4: debugEntry <- LOOP(HEADER, debugVA, 0x1c, nDebugEntry, 5) as _IMAGE_DEBUG_DIRECTORY
+L4(V17): debugEntry <- LOOP(HEADER, debugVA, 0x1c, nDebugEntry, 5) as _IMAGE_DEBUG_DIRECTORY
     P: dbgEntrySize <- debugEntry.SizeOfData
     P: dbgPtrData <- debugEntry.PointerToRawData
     V19: ULT (ADD dbgEntrySize dbgPtrData) FILESIZE term
