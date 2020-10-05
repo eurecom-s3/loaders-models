@@ -1,0 +1,38 @@
+LOADREL ntkrnlmp
+
+DEFINE FILESIZE 500
+
+INPUT HEADER FILESIZE
+
+#### Alias for DosHeader
+P: dosHdr <- HEADER as DOSHeader
+#### NT Headers
+P: ntHdr <- HEADER[dosHdr.e_lfanew, sizeof _IMAGE_NT_HEADERS] as _IMAGE_NT_HEADERS
+#### Program Header
+P: progHdr <- ntHdr.FileHeader as _IMAGE_FILE_HEADER
+#### Optional Header
+P: optHdr <- ntHdr.OptionalHeader as _IMAGE_OPTIONAL_HEADER
+
+P: relocDir <- optHdr.DataDirectory[40, 8] as _IMAGE_DATA_DIRECTORY
+P: relocVA <- relocDir.VirtualAddress
+P: relocSize <- relocDir.Size
+
+#### If we have relocation...
+V1: AND (NEQ relocDir 0) (UGT optHdr.NumberOfRvaAndSizes 5)
+## Make sure that the section alignment is low
+V2(V1): ULT optHdr.SectionAlignment 0x1000 term
+
+## Make sure we have at least some of them
+G1(V1): UGE relocSize 4 term
+
+P: sizeNtHdr <- ADD progHdr.SizeOfOptionalHeader 24
+P: offSectTable <- ADD sizeNtHdr dosHdr.e_lfanew
+P: nSect <- progHdr.NumberOfSections
+G2(V1): ULE nSect 5 term
+L1: section <- LOOP(HEADER, offSectTable, 40, nSect, 5) AS _IMAGE_SECTION_HEADER
+    ## force WRITABLE bit. this prevents the pages protection to be updated
+    V4(V1): NEQ BITAND section.Characteristics 0x80000000 0 term
+    V5(V1): ULE section.VirtualAddress 512 term
+    V6(V1): ULE section.VirtualSize 512 term
+    V7(V1): ULE section.SizeOfRawData 512 term
+END L1
