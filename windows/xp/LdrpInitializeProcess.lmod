@@ -111,7 +111,7 @@ P: certDir <- optHdr.DataDirectory[32, 8] as _IMAGE_DATA_DIRECTORY
 P: certDirVA <- certDir.VirtualAddress
 P: certDirSize <- certDir.Size
 G16: EQ certDir 0 term
-V17: ULT (ADD certDirSize certDirVA) FILESIZE term
+V17: ULE (ADD certDirSize certDirVA) FILESIZE term
 
 
 ### LdrpSetProtection: invoked before relocating to set the pages RWX
