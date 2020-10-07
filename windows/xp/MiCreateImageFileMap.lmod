@@ -71,7 +71,7 @@ P: sectionTableOffset <- ADD HEADER.e_lfanew (ADD progHeader.SizeOfOptionalHeade
 P: nSections <- progHeader.NumberOfSections
 
 # This avoids unconstrained sections
-G98: ULE nSections 1 term
+G98: ULE nSections 5 term
 L1: section <- LOOP(HEADER, sectionTableOffset, (sizeof _IMAGE_SECTION_HEADER), nSections, 5) AS _IMAGE_SECTION_HEADER
 
     # lines (469, 470), and (492, 494)

@@ -97,7 +97,7 @@ P: debugDir <- optHdr.DataDirectory[48, 8] as _IMAGE_DATA_DIRECTORY
 P: debugVA  <- debugDir.VirtualAddress
 P: debugSize <- debugDir.Size
 P: nDebugEntry <- UDIV debugSize 28
-V12: NEq debugSize 0
+V12: AND ULT optHdr.SectionAlignment 0x1000 NEq debugSize 0
 V13(V12): ULT ADD debugVA 0x1c FILESIZE term
 G14: ULE nDebugEntry 5 term
 L3: debugEntry <- LOOP(HEADER, debugVA, 0x1c, nDebugEntry, 5) as _IMAGE_DEBUG_DIRECTORY
