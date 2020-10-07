@@ -100,7 +100,7 @@ P: nDebugEntry <- UDIV debugSize 28
 V12: AND ULT optHdr.SectionAlignment 0x1000 NEq debugSize 0
 V13(V12): ULT ADD debugVA 0x1c FILESIZE term
 G14: ULE nDebugEntry 5 term
-L3: debugEntry <- LOOP(HEADER, debugVA, 0x1c, nDebugEntry, 5) as _IMAGE_DEBUG_DIRECTORY
+L3(V12): debugEntry <- LOOP(HEADER, debugVA, 0x1c, nDebugEntry, 5) as _IMAGE_DEBUG_DIRECTORY
     P: dbgEntrySize <- debugEntry.SizeOfData
     P: dbgPtrData <- debugEntry.PointerToRawData
     V15: ULT (ADD dbgEntrySize dbgPtrData) FILESIZE term
