@@ -133,4 +133,4 @@ P: certDir <- optHdr.DataDirectory[32, 8] as _IMAGE_DATA_DIRECTORY
 P: certDirVA <- certDir.VirtualAddress
 P: certDirSize <- certDir.Size
 G20: EQ certDir 0 term
-V21: ULT (ADD certDirSize certDirVA) FILESIZE term
+V21: ULE (ADD certDirSize certDirVA) FILESIZE term
