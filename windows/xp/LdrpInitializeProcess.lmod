@@ -108,10 +108,11 @@ END L3
 
 #### LdrpCheckForSecuROMImage also checks that the certificate entry lies within the file. We do not support it for generation (it would need to create a valida certificate (which is impossible ofc)
 P: certDir <- optHdr.DataDirectory[32, 8] as _IMAGE_DATA_DIRECTORY
-P: certDirVA <- certDir.VirtualAddress
-P: certDirSize <- certDir.Size
+# P: certDirVA <- certDir.VirtualAddress
+# P: certDirSize <- certDir.Size
 G16: EQ certDir 0 term
-V17: ULE (ADD certDirSize certDirVA) FILESIZE term
+### Apparently this in not terminal...
+# V17: ULE (ADD certDirSize certDirVA) FILESIZE term
 
 
 ### LdrpSetProtection: invoked before relocating to set the pages RWX
