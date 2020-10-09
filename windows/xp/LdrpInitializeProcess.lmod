@@ -87,9 +87,6 @@ G4: EQ tmpSize 0 term
 #### This is GT and not UGT to prevent undeflow!!!!!!
 V10: GT SUB optHdr.SizeOfHeaders 0x2c 0 term
 V11: ULT ADD optHdr.SizeOfHeaders 0x13 FILESIZE term
-### This is the trickiest one. The header content is copied up to SizeOfHeader bytes.
-### The SizeOfHeader field needs to be among the bytes of the header that are copied, otherwise its default value (0x0) will be used for pointer arithmetic, leading to invalid memory accesses
-V111(V1): UGE optHdr.SizeOfHeaders ADD HEADER.e_lfanew 0x5d term
 
 ### LdrpCheckForSecuROMImage
 #### Other implicit constraints, like the one above
