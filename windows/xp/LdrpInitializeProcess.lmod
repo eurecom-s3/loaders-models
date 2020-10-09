@@ -45,7 +45,7 @@ V6(V4, !V5): Eq BITAND fileHdr.Characteristics 0x1 0 term
 
 P: tmpSize <- relocSize
 P(V5): loopStart <- relocVA
-L1(V5): relocBlockAddr <- VLOOP(loopStart, nextBlockAddr, V99, 1)
+L1(V5): relocBlockAddr <- VLOOP(loopStart, nextBlockAddr, V99, 2)
     P: relocBlock <- HEADER[relocBlockAddr, 8]
     P: blockSize <- relocBlock[4, 4]
     P: blockPage <- relocBlock[0, 4]
@@ -58,7 +58,7 @@ L1(V5): relocBlockAddr <- VLOOP(loopStart, nextBlockAddr, V99, 1)
 
     P: tmpEntry <- INT 0 4
     V96: UGE nEntry 1
-    L2(V96): entryAddr <- VLOOP(firstEntryAddr, nextBAddr, V98, 1)
+    L2(V96): entryAddr <- VLOOP(firstEntryAddr, nextBAddr, V98, 2)
         P: entry <- HEADER[entryAddr, 2]
         P: tmpEntry <- ADD tmpEntry 1
         P: nextBAddr <- ADD entryAddr 2
