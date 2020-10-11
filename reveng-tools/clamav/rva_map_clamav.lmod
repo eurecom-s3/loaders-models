@@ -1,0 +1,48 @@
+############################################
+## libclamav/pe.c:cli_rawaddr
+############################################
+
+LOADREL clamav
+
+DEFINE FILESIZE 500
+
+INPUT HEADER FILESIZE
+INPUT RVA 4
+OUTPUT OFF 4
+OUTPUT VAL 1
+OUTPUT ERROR 1
+
+P: sectOff <- SECT HEADER
+P: nSect <- NSECT HEADER
+P: optHdr <- OPTHDR HEADER as pe_image_optional_hdr32
+P: hdrSize <- optHdr.SizeOfHeaders
+
+V1: ULE RVA hdrSize
+V2(V1): UGE RVA FILESIZE
+V3(V2): EQ ERROR 1 term
+V4(V1, !V2): AND (EQ RVA OFF) (EQ ERROR 0) term
+
+P: notFound <- INT 0 (sizeof pe_image_section_hdr)
+P: found <- notFound as pe_image_section_hdr
+
+L1: sect <- LOOP(HEADER, sectOff, sizeof pe_image_section_hdr, nSect, 5) AS pe_image_section_hdr
+    P: SRVA <- sect.VirtualAddress
+    P: cl_rva <- ALIGNDOWN SRVA optHdr.SectionAlignment
+    P: SRSZ <- sect.SizeOfRawData
+    P: cl_rsz <- ALIGNUP SRSZ optHdr.FileAlignment
+
+    V5(!V1): AND (EQ found notFound) (AND AND (NEQ cl_rsz 0) (UGE RVA cl_rva) (UGT cl_rsz (SUB RVA cl_rva)))
+    P(V5): found <- sect
+
+END L1
+
+V6(!V1): EQ found notFound
+V7(V6): EQ ERROR 1 term
+
+P: SRVA <- found.VirtualAddress
+P: cl_rva <- ALIGNUP SRVA optHdr.SectionAlignment
+P: PRD <- found.PointerToRawData
+P: cl_raw <- ALIGNDOWN PRD optHdr.FileAlignment
+V8(!V1, !V6): EQ OFF (ADD (SUB RVA cl_rva) cl_raw) term
+V9(!V1, !V6): EQ VAL HEADER[OFF, 1] term
+V10(!V1, !V6): EQ ERROR 0 term

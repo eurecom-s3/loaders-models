@@ -1,0 +1,54 @@
+LOADREL ntkrnlmp
+
+DEFINE FILESIZE 500
+
+INPUT HEADER FILESIZE
+INPUT RVA 4
+OUTPUT OFF 4
+OUTPUT VAL 1
+OUTPUT ERROR 1
+
+P: sectOff <- SECT HEADER
+P: nSect <- NSECT HEADER
+P: optHdr <- OPTHDR HEADER as _IMAGE_OPTIONAL_HEADER
+
+P: sectAl <- optHdr.SectionAlignment
+V1: UGE sectAl 0x1000
+
+P: notFound <- INT 0 (sizeof _IMAGE_SECTION_HEADER)
+P: found <- notFound as _IMAGE_SECTION_HEADER
+
+P: hdrEnd <- optHdr.SizeOfHeaders
+V2(V1): ULT RVA ALIGNUP hdrEnd sectAl
+V3(V2): ULT RVA hdrEnd
+V101(V3): OFF <- RVA term
+V4(V2): EQ ERROR 0 term
+V5(V3): EQ VAL HEADER[OFF] term
+V6(V2, !V3): EQ VAL 0 term
+
+L1: sect <- LOOP(HEADER, sectOff, (sizeof _IMAGE_SECTION_HEADER), nSect, 5) AS _IMAGE_SECTION_HEADER
+    P: SRVA <- ADD optHdr.ImageBase sect.VirtualAddress
+    P: ERVA <- ALIGNUP (ADD SRVA sect.VirtualSize) sectAl
+    V7: AND (ULE SRVA RVA) (UGT ERVA RVA)
+    P(V7): found <- sect
+END L1
+
+### sectionalign >= 0x1000
+V10(V1): NEQ found notFound
+V11(V1, !V10): EQ ERROR 1 term
+P: sOff <- SUB RVA found.VirtualAddress
+V12(V1, V10): EQ ERROR 0 term
+V13(V1, V10): ULT sOff found.SizeOfRawData
+P: fOff <- ALIGNDOWN found.PointerToRawData optHdr.FileAlignment
+V14(V13): EQ VAL HEADER[ADD fOff sOff, 1] term
+V15(V1, V10, !V13): EQ VAL 0 term
+
+### sectionalign < 0x1000
+V16(!V1): ULT RVA FILESIZE
+V17(!V1, !V16): EQ ERROR 1 term
+V18(V16): EQ VAL HEADER[RVA, 1] term
+V19(V16): EQ ERROR 0 term
+
+#### We want this to be always readable
+G1: EQ ERROR 0 term
+G2: NEQ VAL 0 term
